@@ -3,8 +3,9 @@ package emailtemplating
 import (
 	"bytes"
 	"fmt"
-	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 	texttemplate "text/template"
+
+	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 )
 
 // renderTextBodyTemplate renders a text body template with the given variables

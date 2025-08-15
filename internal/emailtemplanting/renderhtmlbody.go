@@ -3,8 +3,9 @@ package emailtemplating
 import (
 	"bytes"
 	"fmt"
-	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 	htmltemplate "html/template"
+
+	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 )
 
 // renderHTMLTemplate renders an HTML template with the given variables
