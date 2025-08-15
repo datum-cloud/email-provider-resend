@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.miloapis.com/email-provider-resend/internal/config"
 	"go.miloapis.com/email-provider-resend/internal/emailprovider"
 )
 
@@ -36,6 +37,7 @@ import (
 type EmailController struct {
 	Client        client.Client
 	EmailProvider emailprovider.Service
+	Config        config.EmailControllerConfig
 }
 
 // +kubebuilder:rbac:groups=notification.miloapis.com,resources=emails,verbs=get
@@ -83,7 +85,7 @@ func (r *EmailController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		output, err := r.EmailProvider.Send(ctx, email.DeepCopy(), emailTemplate.DeepCopy(), emailRecipient.DeepCopy())
 		if err != nil {
 			log.Error(err, "Failed to send email", "email", email.Name)
-			return ctrl.Result{}, fmt.Errorf("failed to send email: %w", err)
+			return ctrl.Result{RequeueAfter: r.Config.GetWaitTimeBeforeRetry(email.Spec.Priority)}, nil
 		}
 		log.Info("Email sent", "email", email.Name, "deliveryID", output.DeliveryID)
 
