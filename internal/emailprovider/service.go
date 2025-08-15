@@ -12,9 +12,18 @@ import (
 
 // Service ties rendering logic with an underlying EmailProvider.
 type Service struct {
-	Provider EmailProvider // Actual email provider
-	From     string        // Default From address
-	ReplyTo  string        // Default Reply-To address
+	provider EmailProvider // Actual email provider
+	from     string        // Default From address
+	replyTo  string        // Default Reply-To address
+}
+
+// NewService creates a new Service.
+func NewService(provider EmailProvider, from, replyTo string) *Service {
+	return &Service{
+		provider: provider,
+		from:     from,
+		replyTo:  replyTo,
+	}
 }
 
 // Send takes the CRD objects coming from Milo, renders the templates and finally
@@ -47,9 +56,9 @@ func (s *Service) Send(ctx context.Context,
 		return output, fmt.Errorf("render subject: %w", err)
 	}
 
-	return s.Provider.SendEmail(ctx, SendEmailInput{
-		From:           s.From,
-		ReplyTo:        s.ReplyTo,
+	return s.provider.SendEmail(ctx, SendEmailInput{
+		From:           s.from,
+		ReplyTo:        s.replyTo,
 		To:             []string{userRecipient.Spec.Email},
 		Cc:             email.Spec.CC,
 		Bcc:            email.Spec.BCC,
