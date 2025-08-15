@@ -7,7 +7,7 @@ import (
 	iammiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/iam/v1alpha1"
 	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 
-	"go.miloapis.com/email-provider-resend/internal/emailtemplanting"
+	emailtemplating "go.miloapis.com/email-provider-resend/internal/emailtemplanting"
 )
 
 // Service ties rendering logic with an underlying EmailProvider.
