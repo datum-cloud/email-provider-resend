@@ -94,9 +94,9 @@ func createManagerCommand() *cobra.Command {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 
 	// Email provider config
-	cmd.Flags().StringVar(&emailApiKey, "email-provider-api-key", "", "*Required. The API key for the email provider.")
-	cmd.Flags().StringVar(&emailFrom, "email-provider-from", "", "*Required. The from address for the email provider.")
-	cmd.Flags().StringVar(&emailReplyTo, "email-provider-reply-to", "",
+	cmd.Flags().StringVar(&emailApiKey, "resend-api-key", "", "*Required. The API key for the email provider.")
+	cmd.Flags().StringVar(&emailFrom, "email-from-address", "", "*Required. The from address for the email provider.")
+	cmd.Flags().StringVar(&emailReplyTo, "email-reply-to-address", "",
 		"*Required. The reply to address for the email provider.")
 
 	// Email controller config
