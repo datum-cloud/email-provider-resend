@@ -64,7 +64,8 @@ func (r *EmailController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// Get EmailTemplate
 	emailTemplate := &notificationmiloapiscomv1alpha1.EmailTemplate{} // Cluster scoped resource
-	if err = r.Client.Get(ctx, client.ObjectKey{Name: email.Spec.TemplateRef.Name}, emailTemplate); err != nil {
+	err = r.Client.Get(ctx, client.ObjectKey{Name: email.Spec.TemplateRef.Name}, emailTemplate)
+	if err != nil {
 		// emailTemplate is warranty to exist. As it is checked on a webhook on Milo.
 		log.Error(err, "Failed to get EmailTemplate", "email", email.Spec.TemplateRef.Name)
 		return ctrl.Result{}, fmt.Errorf("failed to get EmailTemplate: %w", err)
@@ -95,20 +96,19 @@ func (r *EmailController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		// reconciliations.
 		email.Status.ProviderID = output.DeliveryID
 
-		pendingCond := metav1.Condition{
+		// EmailProvider.Send (resend implementation) uses an idempotency mechanism using the Email.Name as idempotency key.
+		// In case of a failure updating the status, the email won't be sent again, and the return value from EmailProvider.Send
+		// will be the same one as the original one. The idempotency only lasts for 24 hours.
+		if err := r.updateEmailStatus(ctx, email, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.EmailDeliveredCondition,
 			Status:             metav1.ConditionUnknown,
 			Reason:             notificationmiloapiscomv1alpha1.EmailDeliveryPendingReason,
 			Message:            fmt.Sprintf("Email accepted for delivery. Provider ID: %s", output.DeliveryID),
 			LastTransitionTime: metav1.Now(),
-		}
-		meta.SetStatusCondition(&email.Status.Conditions, pendingCond)
-
-		if err := r.Client.Status().Update(ctx, email); err != nil {
-			log.Error(err, "failed to update Email status", "email", email.Name)
+		}); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update Email status: %w", err)
 		}
-		log.Info("Email status updated")
+
 	} else {
 		log.Info("Email was already sent. Probably reconciling because of webhook update.")
 	}
@@ -130,6 +130,21 @@ func isEmailAlreadySent(email *notificationmiloapiscomv1alpha1.Email) bool {
 	}
 
 	return false
+}
+
+// updateEmailStatus updates the status of the email with the given condition.
+func (r *EmailController) updateEmailStatus(ctx context.Context, email *notificationmiloapiscomv1alpha1.Email, condition metav1.Condition) error {
+	log := logf.FromContext(ctx).WithName("email-reconciler")
+
+	meta.SetStatusCondition(&email.Status.Conditions, condition)
+
+	if err := r.Client.Status().Update(ctx, email); err != nil {
+		log.Error(err, "failed to update Email status", "email", email.Name)
+		return fmt.Errorf("failed to update Email status: %w", err)
+	}
+	log.Info("Email status updated")
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
