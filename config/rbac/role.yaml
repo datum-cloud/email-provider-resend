@@ -14,7 +14,13 @@ rules:
   - notification.miloapis.com
   resources:
   - emails
-  - emails/status
   - emailtemplates
   verbs:
   - get
+- apiGroups:
+  - notification.miloapis.com
+  resources:
+  - emails/status
+  verbs:
+  - get
+  - update

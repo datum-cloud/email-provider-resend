@@ -41,7 +41,7 @@ type EmailController struct {
 }
 
 // +kubebuilder:rbac:groups=notification.miloapis.com,resources=emails,verbs=get
-// +kubebuilder:rbac:groups=notification.miloapis.com,resources=emails/status,verbs=get
+// +kubebuilder:rbac:groups=notification.miloapis.com,resources=emails/status,verbs=get;update
 // +kubebuilder:rbac:groups=notification.miloapis.com,resources=emailtemplates,verbs=get
 // +kubebuilder:rbac:groups=iam.miloapis.com,resources=users,verbs=get
 
