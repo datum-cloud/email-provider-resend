@@ -1,0 +1,40 @@
+version: "3"
+
+dotenv: [".env"]  # Load variables automatically from .env at project root
+
+# Taskfile for local development and testing
+# Requires: https://taskfile.dev
+
+# Usage examples:
+#   EMAIL_API_KEY=yourkey 
+#   EMAIL_PROVIDER_FROM=from@example.com \
+#   EMAIL_PROVIDER_REPLY_TO=reply@example.com task run
+#
+# The run-manager task disables the metrics endpoint (metrics-bind-address=0) and skips any
+# other production-specific settings so you can focus on testing the Email
+# controller logic locally.
+
+tasks:
+  # Run the controller manager locally
+  run-manager:
+    desc: "Run the controller manager locally with minimal settings"
+    cmds:
+      - |
+        # Ensure required environment variables are present
+        # EMAIL_API_KEY can now be defined in the .env file or exported in the shell
+        : ${EMAIL_PROVIDER_FROM:?EMAIL_PROVIDER_FROM environment variable is required}
+        : ${EMAIL_PROVIDER_REPLY_TO:?EMAIL_PROVIDER_REPLY_TO environment variable is required}
+        
+        go run ./cmd manager \
+          --metrics-bind-address 0 \
+          --email-provider-api-key "$EMAIL_API_KEY" \
+          --email-provider-from "$EMAIL_PROVIDER_FROM" \
+          --email-provider-reply-to "$EMAIL_PROVIDER_REPLY_TO"
+
+    env:
+      # Propagate the variables set in the shell to Task so they can be used in the
+      # command block above. Values can be provided via the environment or a .env
+      # file.
+      EMAIL_API_KEY: "{{.EMAIL_API_KEY}}"
+      EMAIL_PROVIDER_FROM: "onboarding@resend.dev"
+      EMAIL_PROVIDER_REPLY_TO: "delivered@resend.dev"

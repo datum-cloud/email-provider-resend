@@ -10,7 +10,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
-require go.miloapis.com/milo v0.2.1-0.20250815125617-d45fd14f2394
+require go.miloapis.com/milo v0.2.1-0.20250818155242-0665291be72b
 
 require github.com/resend/resend-go/v2 v2.23.0
 
@@ -53,7 +53,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/spf13/cobra v1.9.1 // indirect
+	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
