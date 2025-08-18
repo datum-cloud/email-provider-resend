@@ -8,4 +8,11 @@ layout:
 - go.kubebuilder.io/v4
 projectName: email-provider-resend
 repo: go.miloapis.com/email-provider-resend
+resources:
+- controller: true
+  domain: notification.miloapis.com
+  external: true
+  kind: Email
+  path: go.miloapis.com/milo/pkg/apis/notification/v1alpha1
+  version: v1alpha1
 version: "3"
