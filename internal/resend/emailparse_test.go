@@ -160,6 +160,21 @@ func TestParseEvent_VariousBodies(t *testing.T) {
 				}
 			}`,
 		},
+		{
+			name:         "email.scheduled",
+			expectedType: EventTypeScheduled,
+			body: `{
+				"created_at": "2025-08-19T12:51:39.710Z",
+				"data": {
+					"created_at": "2025-08-19T12:51:39.600662+00:00",
+					"email_id": "0cbbc092-b503-4a3e-a64d-52d3d7d597db",
+					"from": "Acme <onboarding@resend.dev>",
+					"subject": "hello world",
+					"to": ["delivered@resend.dev"]
+				},
+				"type": "email.scheduled"
+			}`,
+		},
 	}
 
 	for _, tc := range cases {

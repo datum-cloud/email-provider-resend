@@ -18,6 +18,7 @@ const (
 	EventTypeOpened           EmailEventType = "email.opened"
 	EventTypeClicked          EmailEventType = "email.clicked"
 	EventTypeEmailFailed      EmailEventType = "email.failed"
+	EventTypeScheduled        EmailEventType = "email.scheduled"
 )
 
 // AllowedEvents lists every event type currently supported by this SDK.
@@ -31,6 +32,7 @@ var AllowedEvents = []EmailEventType{
 	EventTypeOpened,
 	EventTypeClicked,
 	EventTypeEmailFailed,
+	EventTypeScheduled,
 }
 
 // Tag represents a key/value pair attached to events.
