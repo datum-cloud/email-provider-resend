@@ -32,6 +32,7 @@ func ParseEmailEvent(body []byte) (*ParsedEvent, error) {
 
 	pe := &ParsedEvent{Envelope: env, Base: base}
 
+	// Decode the event-specific data.
 	switch env.Type {
 	case EventTypeClicked:
 		var c struct {
