@@ -4,20 +4,24 @@ import (
 	"net/http"
 )
 
-func Ok() Response {
+func OkResponse() Response {
 	return webhookResponse(http.StatusOK)
 }
 
-func BadRequest() Response {
+func BadRequestResponse() Response {
 	return webhookResponse(http.StatusBadRequest)
 }
 
-func MethodNotAllowed() Response {
+func MethodNotAllowedResponse() Response {
 	return webhookResponse(http.StatusMethodNotAllowed)
 }
 
-func InternalServerError() Response {
+func InternalServerErrorResponse() Response {
 	return webhookResponse(http.StatusInternalServerError)
+}
+
+func NotFoundResponse() Response {
+	return webhookResponse(http.StatusNotFound)
 }
 
 func webhookResponse(httpStatus int) Response {

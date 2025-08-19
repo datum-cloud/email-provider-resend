@@ -36,21 +36,21 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error(nil, "Panic in webhook handler", "panic", r)
-			wh.writeResponse(w, InternalServerError())
+			wh.writeResponse(w, InternalServerErrorResponse())
 		}
 	}()
 
 	if r.Method != http.MethodPost {
 		log.Error(nil, "Method not allowed", "method", r.Method)
 		w.Header().Set("Allow", http.MethodPost)
-		wh.writeResponse(w, MethodNotAllowed())
+		wh.writeResponse(w, MethodNotAllowedResponse())
 		return
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Error(err, "Failed to read request body")
-		wh.writeResponse(w, InternalServerError())
+		wh.writeResponse(w, InternalServerErrorResponse())
 		return
 	}
 	defer func() {
@@ -62,7 +62,7 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	emailEvent, err := resend.ParseEmailEvent(body)
 	if err != nil {
 		log.Error(err, "Failed to parse email event")
-		wh.writeResponse(w, BadRequest())
+		wh.writeResponse(w, BadRequestResponse())
 		return
 	}
 
