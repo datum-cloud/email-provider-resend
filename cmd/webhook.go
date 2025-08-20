@@ -114,7 +114,7 @@ func runWebhook(
 	log.Info("Setting up webhook server")
 	hookServer := mgr.GetWebhookServer()
 
-	webhookv1 := webhook.NewResendWebhook(mgr.GetClient())
+	webhookv1 := webhook.NewResendWebhookV1(mgr.GetClient())
 	hookServer.Register(webhookv1.Endpoint, webhookv1)
 
 	log.Info("Starting manager")

@@ -23,7 +23,7 @@ type Webhook struct {
 
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create
 
-func NewResendWebhook(k8sClient client.Client) *Webhook {
+func NewResendWebhookV1(k8sClient client.Client) *Webhook {
 	return &Webhook{
 		Handler: HandlerFunc(func(ctx context.Context, req Request) Response {
 			log := logf.FromContext(ctx).WithName("resend-webhook")
