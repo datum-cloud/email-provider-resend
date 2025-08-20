@@ -7,7 +7,6 @@ import (
 
 	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -95,27 +94,13 @@ func runWebhook(
 		return fmt.Errorf("failed to create manager: %w", err)
 	}
 
-	log.Info("Adding providerID index")
-	if err := mgr.GetFieldIndexer().
-		IndexField(
-			cmd.Context(),
-			&notificationmiloapiscomv1alpha1.Email{},
-			"status.providerID",
-			func(rawObj client.Object) []string {
-				email := rawObj.(*notificationmiloapiscomv1alpha1.Email)
-				if email.Status.ProviderID == "" {
-					return nil
-				}
-				return []string{email.Status.ProviderID}
-			}); err != nil {
-		return fmt.Errorf("failed to create index for providerID: %w", err)
-	}
-
 	log.Info("Setting up webhook server")
-	hookServer := mgr.GetWebhookServer()
 
 	webhookv1 := webhook.NewResendWebhookV1(mgr.GetClient())
-	hookServer.Register(webhookv1.Endpoint, webhookv1)
+	err = webhookv1.SetupWithManager(mgr)
+	if err != nil {
+		return fmt.Errorf("failed to setup webhook: %w", err)
+	}
 
 	log.Info("Starting manager")
 	return mgr.Start(cmd.Context())

@@ -9,6 +9,7 @@ import (
 	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -19,6 +20,31 @@ import (
 type Webhook struct {
 	Handler  Handler
 	Endpoint string
+}
+
+// SetupWithManager sets up the webhook with the Manager
+func (w *Webhook) SetupWithManager(mgr ctrl.Manager) error {
+	// Index Email objects by .status.providerID so that the webhook handler can
+	// quickly look them up when processing incoming events.
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&notificationmiloapiscomv1alpha1.Email{},
+		"status.providerID",
+		func(rawObj client.Object) []string {
+			email := rawObj.(*notificationmiloapiscomv1alpha1.Email)
+			if email.Status.ProviderID == "" {
+				return nil
+			}
+			return []string{email.Status.ProviderID}
+		},
+	); err != nil {
+		return fmt.Errorf("failed to create index for providerID: %w", err)
+	}
+
+	hookServer := mgr.GetWebhookServer()
+	hookServer.Register(w.Endpoint, w)
+
+	return nil
 }
 
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create
