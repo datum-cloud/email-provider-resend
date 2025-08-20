@@ -8,7 +8,7 @@ import (
 
 // IsAllowedEvent returns true if the given event type is supported.
 func IsAllowedEvent(et EmailEventType) bool {
-	return slices.Contains(AllowedEvents, et)
+	return slices.Contains(allowedEvents, et)
 }
 
 // ParseEvent decodes a Resend webhook payload into a ParsedEvent structure.

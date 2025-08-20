@@ -41,17 +41,13 @@ func NewResendWebhook(k8sClient client.Client) *Webhook {
 			}
 			email := &emails.Items[0]
 
-			conditionStatus, emailDeliveredReason, eventType, err := getEmailCondition(req.Event.Envelope.Type)
-			if err != nil {
-				log.Error(err, "Failed to get email condition", "event", req.Event.Envelope.Type)
-				return BadRequestResponse()
-			}
+			emailCondition := resend.GetEmailCondition(req.Event.Envelope.Type)
 
 			// Update email status
 			condition := metav1.Condition{
 				Type:               notificationmiloapiscomv1alpha1.EmailDeliveredCondition,
-				Status:             conditionStatus,
-				Reason:             emailDeliveredReason, // default reason
+				Status:             emailCondition.Status,
+				Reason:             emailCondition.EmailDeliveredReason,
 				Message:            fmt.Sprintf("Updated Email status from webhook event: %s", req.Event.Envelope.Type),
 				LastTransitionTime: metav1.Now(),
 			}
@@ -69,7 +65,7 @@ func NewResendWebhook(k8sClient client.Client) *Webhook {
 				},
 				Reason:              condition.Reason,
 				Note:                condition.Message,
-				Type:                eventType,
+				Type:                emailCondition.CoreEventType,
 				EventTime:           metav1.MicroTime{Time: time.Now()},
 				ReportingController: "email-provider-resend-webhook",
 				ReportingInstance:   "email-provider-resend-webhook-1",
@@ -93,45 +89,4 @@ func NewResendWebhook(k8sClient client.Client) *Webhook {
 		}),
 		Endpoint: "/apis/emailnotification.k8s.io/v1/resend",
 	}
-}
-
-func getEmailCondition(resendEventType resend.EmailEventType) (metav1.ConditionStatus, string, string, error) {
-	conditionStatus := metav1.ConditionUnknown
-	var emailDeliveredReason string
-	var eventType string
-
-	// Explanation of each resend event type:
-	// https://resend.com/docs/dashboard/webhooks/event-types#email-complained
-	switch resendEventType {
-	// Email delivered successfully, Normal event
-	case resend.EventTypeDelivered, resend.EventTypeOpened, resend.EventTypeClicked:
-		emailDeliveredReason = notificationmiloapiscomv1alpha1.EmailDeliveredReason
-		eventType = corev1.EventTypeNormal
-	// Email delivered successfully, Warning event (Went to spam)
-	case resend.EventTypeComplained:
-		emailDeliveredReason = notificationmiloapiscomv1alpha1.EmailDeliveredReason
-		eventType = corev1.EventTypeWarning
-	// Email delivery pending, Normal event
-	case resend.EventTypeScheduled, resend.EventTypeSent:
-		emailDeliveredReason = notificationmiloapiscomv1alpha1.EmailDeliveryPendingReason
-		eventType = corev1.EventTypeNormal
-	// Email delivery pending, Warning event
-	case resend.EventTypeDeliveredDelayed:
-		emailDeliveredReason = notificationmiloapiscomv1alpha1.EmailDeliveryPendingReason
-		eventType = corev1.EventTypeWarning
-	// Email delivery failed, Warning event
-	case resend.EventTypeBounced, resend.EventTypeEmailFailed:
-		emailDeliveredReason = notificationmiloapiscomv1alpha1.EmailDeliveryFailedReason
-		eventType = corev1.EventTypeWarning
-	default:
-		return "", "", "", fmt.Errorf("unknown event type: %s", resendEventType)
-	}
-
-	if emailDeliveredReason == notificationmiloapiscomv1alpha1.EmailDeliveredReason {
-		conditionStatus = metav1.ConditionTrue
-	} else {
-		conditionStatus = metav1.ConditionFalse
-	}
-
-	return conditionStatus, emailDeliveredReason, eventType, nil
 }

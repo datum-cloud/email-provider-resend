@@ -23,7 +23,7 @@ const (
 
 // AllowedEvents lists every event type currently supported by this SDK.
 // The slice keeps declaration order for readability.
-var AllowedEvents = []EmailEventType{
+var allowedEvents = []EmailEventType{
 	EventTypeSent,
 	EventTypeDelivered,
 	EventTypeDeliveredDelayed,
@@ -33,6 +33,30 @@ var AllowedEvents = []EmailEventType{
 	EventTypeClicked,
 	EventTypeEmailFailed,
 	EventTypeScheduled,
+}
+
+// successfulDeliveredEvents are events that indicate a successful delivery.
+var successfulDeliveredEventsDeliveredEvents = []EmailEventType{
+	EventTypeDelivered,
+	EventTypeOpened,
+	EventTypeClicked,
+	EventTypeComplained,
+}
+
+// failedDeliveredEvents are events that indicate a failed delivery.
+var failedDeliveredEvents = []EmailEventType{
+	EventTypeBounced,
+	EventTypeEmailFailed,
+}
+
+// NormalDeliveredEvents are events that indicate a normal delivery.
+var normalDeliveredEvents = []EmailEventType{
+	EventTypeDelivered,
+	EventTypeOpened,
+	EventTypeClicked,
+	EventTypeScheduled,
+	EventTypeSent,
+	EventTypeDeliveredDelayed,
 }
 
 // Tag represents a key/value pair attached to events.
