@@ -56,7 +56,6 @@ var normalDeliveredEvents = []EmailEventType{
 	EventTypeClicked,
 	EventTypeScheduled,
 	EventTypeSent,
-	EventTypeDeliveredDelayed,
 }
 
 // Tag represents a key/value pair attached to events.

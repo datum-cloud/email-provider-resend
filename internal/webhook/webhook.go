@@ -63,6 +63,7 @@ func NewResendWebhook(k8sClient client.Client) *Webhook {
 					GenerateName: fmt.Sprintf("%s-", email.Name),
 					Namespace:    email.Namespace,
 				},
+				Action:              "Update",
 				Reason:              condition.Reason,
 				Note:                condition.Message,
 				Type:                emailCondition.CoreEventType,
@@ -79,7 +80,7 @@ func NewResendWebhook(k8sClient client.Client) *Webhook {
 				},
 			}
 			if err := k8sClient.Create(ctx, webhookEvent); err != nil {
-				log.Error(err, "Failed to create Event", "email", email.Name, "event", webhookEvent)
+				log.Error(err, "Failed to create Event", "email", email.Name)
 				return InternalServerErrorResponse()
 			}
 
@@ -87,6 +88,6 @@ func NewResendWebhook(k8sClient client.Client) *Webhook {
 
 			return OkResponse()
 		}),
-		Endpoint: "/apis/emailnotification.k8s.io/v1/resend",
+		Endpoint: "/apis/emailnotification.k8s.io/v1/resend/emails",
 	}
 }

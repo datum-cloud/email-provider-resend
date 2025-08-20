@@ -5,7 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -72,6 +74,9 @@ func runWebhook(
 	if err := notificationmiloapiscomv1alpha1.AddToScheme(runtimeScheme); err != nil {
 		return fmt.Errorf("failed to add notificationmiloapiscomv1alpha1 scheme: %w", err)
 	}
+	if err := eventsv1.AddToScheme(runtimeScheme); err != nil {
+		return fmt.Errorf("failed to add eventsv1 scheme: %w", err)
+	}
 
 	log.Info("Creating manager")
 	mgr, err := manager.New(restConfig, manager.Options{
@@ -88,6 +93,22 @@ func runWebhook(
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create manager: %w", err)
+	}
+
+	log.Info("Adding providerID index")
+	if err := mgr.GetFieldIndexer().
+		IndexField(
+			cmd.Context(),
+			&notificationmiloapiscomv1alpha1.Email{},
+			"status.providerID",
+			func(rawObj client.Object) []string {
+				email := rawObj.(*notificationmiloapiscomv1alpha1.Email)
+				if email.Status.ProviderID == "" {
+					return nil
+				}
+				return []string{email.Status.ProviderID}
+			}); err != nil {
+		return fmt.Errorf("failed to create index for providerID: %w", err)
 	}
 
 	log.Info("Setting up webhook server")
