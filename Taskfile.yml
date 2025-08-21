@@ -54,9 +54,14 @@ tasks:
       - generate-webhook-certs
     cmds:
       - |
+        # Ensure the signing key is provided
+        : ${RESEND_WEBHOOK_SIGNING_KEY:?RESEND_WEBHOOK_SIGNING_KEY environment variable is required}
+
         go run ./cmd resend-webhook \
           --webhook-port 8443 \
           --cert-dir "{{.CERTS_DIR}}" \
           --cert-file "server.crt" \
           --key-file "server.key" \
-          --metrics-bind-address :8082
+          --metrics-bind-address :8082 \
+          --resend-webhook-signing-key "$RESEND_WEBHOOK_SIGNING_KEY"
+
