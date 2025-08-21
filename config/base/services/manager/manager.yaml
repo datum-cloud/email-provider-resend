@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: email-provider-resend
+    app.kubernetes.io/managed-by: kustomize
+  name: system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: email-provider-resend
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: email-provider-resend
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        control-plane: controller-manager
+        app.kubernetes.io/name: email-provider-resend
+    spec:
+      securityContext:
+        # Projects are configured by default to adhere to the "restricted" Pod Security Standards.
+        # This ensures that deployments meet the highest security requirements for Kubernetes.
+        # For more details, see: https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - args:
+          - controller
+          # Manager
+          - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
+          - --leader-elect=$(ENABLE_LEADER_ELECTION)
+          - --health-probe-bind-address=$(HEALTH_PROBE_BIND_ADDRESS)
+          - --enable-http2=$(ENABLE_HTTP2)
+          # Webhook
+          - --webhook-cert-path=$(WEBHOOK_CERT_PATH)
+          - --webhook-cert-name=$(WEBHOOK_CERT_NAME)
+          - --webhook-cert-key=$(WEBHOOK_CERT_KEY)
+          # Metrics
+          - --metrics-secure=$(METRICS_SECURE)
+          - --metrics-cert-path=$(METRICS_CERT_PATH)
+          - --metrics-cert-name=$(METRICS_CERT_NAME)
+          - --metrics-cert-key=$(METRICS_CERT_KEY)
+          # Resend
+          - --resend-api-key=$(RESEND_API_KEY)
+          - --email-from-address=$(EMAIL_FROM_ADDRESS)
+          - --email-reply-to-address=$(EMAIL_REPLY_TO_ADDRESS)
+          # Email controller
+          - --wait-time-before-retry-low-priority-email=$(WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL)
+          - --wait-time-before-retry-normal-priority-email=$(WAIT_TIME_BEFORE_RETRY_NORMAL_PRIORITY_EMAIL)
+          - --wait-time-before-retry-high-priority-email=$(WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL)
+        env:
+          # Manager
+          - name: METRICS_BIND_ADDRESS
+            value: ":8443"
+          - name: ENABLE_LEADER_ELECTION
+            value: "true"
+          - name: HEALTH_PROBE_BIND_ADDRESS
+            value: ":8081"
+          - name: ENABLE_HTTP2
+            value: "false"
+          # Webhook
+          - name: WEBHOOK_CERT_PATH
+            value: certs
+          - name: WEBHOOK_CERT_NAME
+            value: tls.crt
+          - name: WEBHOOK_CERT_KEY
+            value: tls.key
+          # Metrics
+          - name: METRICS_SECURE
+            value: "true"
+          - name: METRICS_CERT_PATH
+            value: certs
+          - name: METRICS_CERT_NAME
+            value: tls.crt
+          - name: METRICS_CERT_KEY
+            value: tls.key
+          # Resend
+          - name: EMAIL_FROM_ADDRESS
+            value: $(EMAIL_FROM_ADDRESS)
+          - name: EMAIL_REPLY_TO_ADDRESS
+            value: $(EMAIL_REPLY_TO_ADDRESS)
+          # Email controller
+          - name: WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL
+            value: "120s"
+          - name: WAIT_TIME_BEFORE_RETRY_NORMAL_PRIORITY_EMAIL
+            value: "30s"
+          - name: WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL
+            value: "1s"
+        envFrom:
+          - secretRef:
+              name: resend-api-key
+              key: RESEND_API_KEY
+
+        image: ghcr.io/datum-cloud/email-provider-resend:latest
+        name: controller-manager
+        env:
+        
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        # TODO(user): Configure the resources accordingly based on the project requirements.
+        # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 200m
+            memory: 128Mi
+        volumeMounts: []
+      volumes: []
+      serviceAccountName: controller-manager
+      terminationGracePeriodSeconds: 10
