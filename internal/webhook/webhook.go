@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	svix "github.com/svix/svix-webhooks/go"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -20,6 +21,7 @@ import (
 type Webhook struct {
 	Handler  Handler
 	Endpoint string
+	svix     *svix.Webhook
 }
 
 // SetupWithManager sets up the webhook with the Manager
@@ -45,6 +47,11 @@ func (w *Webhook) SetupWithManager(mgr ctrl.Manager) error {
 	hookServer.Register(w.Endpoint, w)
 
 	return nil
+}
+
+// SetupSvix sets svix client in the Webhook struct.
+func (w *Webhook) SetupSvix(svixClient *svix.Webhook) {
+	w.svix = svixClient
 }
 
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create

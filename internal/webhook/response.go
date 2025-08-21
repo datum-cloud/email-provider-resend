@@ -24,6 +24,10 @@ func NotFoundResponse() Response {
 	return webhookResponse(http.StatusNotFound)
 }
 
+func UnauthorizedResponse() Response {
+	return webhookResponse(http.StatusUnauthorized)
+}
+
 func webhookResponse(httpStatus int) Response {
 	return Response{
 		HttpStatus: httpStatus,

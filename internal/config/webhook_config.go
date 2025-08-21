@@ -16,12 +16,13 @@ type WebhookConfig struct {
 	CertFile           string
 	KeyFile            string
 	MetricsBindAddress string
+	WebhookSigningKey  string
 }
 
 // NewWebhookConfig validates the provided parameters and, if they are correct,
 // returns a WebhookConfig instance. If any of the parameters are invalid an
 // aggregated error is returned describing all the problems found.
-func NewWebhookConfig(port int, certDir, certFile, keyFile, metricsBindAddress string) (*WebhookConfig, error) {
+func NewWebhookConfig(port int, certDir, certFile, keyFile, metricsBindAddress, webhookSigningKey string) (*WebhookConfig, error) {
 	log := logf.Log.WithName("resendn-webhook")
 	var errs field.ErrorList
 
@@ -47,6 +48,10 @@ func NewWebhookConfig(port int, certDir, certFile, keyFile, metricsBindAddress s
 		errs = append(errs, field.Required(field.NewPath("metricsBindAddress"), "is required"))
 	}
 
+	if webhookSigningKey == "" {
+		errs = append(errs, field.Required(field.NewPath("webhookSigningKey"), "is required"))
+	}
+
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("invalid webhook config: %w", errs.ToAggregate())
 	}
@@ -68,5 +73,6 @@ func NewWebhookConfig(port int, certDir, certFile, keyFile, metricsBindAddress s
 		CertFile:           certFile,
 		KeyFile:            keyFile,
 		MetricsBindAddress: metricsBindAddress,
+		WebhookSigningKey:  webhookSigningKey,
 	}, nil
 }

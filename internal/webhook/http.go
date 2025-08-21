@@ -59,6 +59,13 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// Verify the signature of the request using svix
+	if err := wh.svix.Verify(body, r.Header); err != nil {
+		log.Error(err, "Failed to verify request")
+		wh.writeResponse(w, UnauthorizedResponse())
+		return
+	}
+
 	emailEvent, err := resend.ParseEmailEvent(body)
 	if err != nil {
 		log.Error(err, "Failed to parse email event")
