@@ -35,7 +35,6 @@ spec:
             - --cert-file=$(CERT_FILE)
             - --key-file=$(KEY_FILE)
             - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
-            - --resend-webhook-signing-key=$(RESEND_WEBHOOK_SIGNING_KEY)
           env:
             - name: WEBHOOK_PORT
               value: "8090"
@@ -49,8 +48,7 @@ spec:
               value: ":8443"
           envFrom:
             - secretRef:
-                name: resend-webhook-signing-key
-                key: RESEND_WEBHOOK_SIGNING_KEY
+                name: resend-webhook-signing-key # MUST contain the key RESEND_WEBHOOK_SIGNING_KEY
           ports:
             - containerPort: 8443
               name: metrics
