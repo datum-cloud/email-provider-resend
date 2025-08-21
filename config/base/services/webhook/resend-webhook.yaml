@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resend-webhook
+  labels:
+    app.kubernetes.io/name: resend-webhook
+    app.kubernetes.io/part-of: email-provider-resend
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: resend-webhook
+      app.kubernetes.io/part-of: email-provider-resend
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: resend-webhook
+        app.kubernetes.io/part-of: email-provider-resend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: resend-webhook
+          image: ghcr.io/datum-cloud/email-provider-resend:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - resend-webhook
+            - --webhook-port=$(WEBHOOK_PORT)
+            - --cert-dir=$(CERT_DIR)
+            - --cert-file=$(CERT_FILE)
+            - --key-file=$(KEY_FILE)
+            - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
+            - --resend-webhook-signing-key=$(RESEND_WEBHOOK_SIGNING_KEY)
+          env:
+            - name: WEBHOOK_PORT
+              value: "8090"
+            - name: CERT_DIR
+              value: certs
+            - name: CERT_FILE
+              value: tls.crt
+            - name: KEY_FILE
+              value: tls.key
+            - name: METRICS_BIND_ADDRESS
+              value: ":8443"
+          envFrom:
+            - secretRef:
+                name: resend-webhook-signing-key
+          ports:
+            - containerPort: 8443
+              name: metrics
+              protocol: TCP
+            - containerPort: 8090
+              name: webhook
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - "ALL"
+          volumeMounts: []
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 10
+      volumes: []
