@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	svixSdk "github.com/svix/svix-webhooks/go"
@@ -47,12 +48,10 @@ func createWebhookCommand() *cobra.Command {
 	cmd.Flags().StringVar(&certFile, "cert-file", "", "Filename in the directory that contains the TLS cert")
 	cmd.Flags().StringVar(&keyFile, "key-file", "", "Filename in the directory that contains the TLS private key")
 
-	// Webhook flags
-	cmd.Flags().StringVar(&webhookSigningKey, "resend-webhook-signing-key", "",
-		"*Required. Signing key for the resendwebhook. This is used to verify the webhook requests from Resend.")
-
 	// Metrics flags.
 	cmd.Flags().StringVar(&metricsBindAddress, "metrics-bind-address", ":8080", "address the metrics endpoint binds to")
+
+	webhookSigningKey = os.Getenv("RESEND_WEBHOOK_SIGNING_KEY")
 
 	return cmd
 }
