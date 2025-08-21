@@ -140,8 +140,8 @@ spec:
             cpu: 500m
             memory: 128Mi
           requests:
-            cpu: 10m
-            memory: 64Mi
+            cpu: 200m
+            memory: 128Mi
         volumeMounts: []
       volumes: []
       serviceAccountName: controller-manager
