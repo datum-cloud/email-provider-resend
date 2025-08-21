@@ -95,11 +95,11 @@ spec:
             value: $(EMAIL_REPLY_TO_ADDRESS)
           # Email controller
           - name: WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL
-            value: $(WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL)
+            value: "120s"
           - name: WAIT_TIME_BEFORE_RETRY_NORMAL_PRIORITY_EMAIL
-            value: $(WAIT_TIME_BEFORE_RETRY_NORMAL_PRIORITY_EMAIL)
+            value: "30s"
           - name: WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL
-            value: $(WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL)
+            value: "1s"
         envFrom:
           - secretRef:
               name: resend-api-key
