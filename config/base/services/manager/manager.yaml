@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
-    app.kubernetes.io/name: email-provider-resend
+    app.kubernetes.io/name: auth-provider-zitadel
     app.kubernetes.io/managed-by: kustomize
   name: system
 ---
@@ -14,13 +14,13 @@ metadata:
   namespace: system
   labels:
     control-plane: controller-manager
-    app.kubernetes.io/name: email-provider-resend
+    app.kubernetes.io/name: auth-provider-zitadel
     app.kubernetes.io/managed-by: kustomize
 spec:
   selector:
     matchLabels:
       control-plane: controller-manager
-      app.kubernetes.io/name: email-provider-resend
+      app.kubernetes.io/name: auth-provider-zitadel
   replicas: 1
   template:
     metadata:
@@ -28,28 +28,8 @@ spec:
         kubectl.kubernetes.io/default-container: manager
       labels:
         control-plane: controller-manager
-        app.kubernetes.io/name: email-provider-resend
+        app.kubernetes.io/name: auth-provider-zitadel
     spec:
-      # TODO(user): Uncomment the following code to configure the nodeAffinity expression
-      # according to the platforms which are supported by your solution.
-      # It is considered best practice to support multiple architectures. You can
-      # build your manager image using the makefile target docker-buildx.
-      # affinity:
-      #   nodeAffinity:
-      #     requiredDuringSchedulingIgnoredDuringExecution:
-      #       nodeSelectorTerms:
-      #         - matchExpressions:
-      #           - key: kubernetes.io/arch
-      #             operator: In
-      #             values:
-      #               - amd64
-      #               - arm64
-      #               - ppc64le
-      #               - s390x
-      #           - key: kubernetes.io/os
-      #             operator: In
-      #             values:
-      #               - linux
       securityContext:
         # Projects are configured by default to adhere to the "restricted" Pod Security Standards.
         # This ensures that deployments meet the highest security requirements for Kubernetes.
@@ -58,14 +38,84 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - command:
-        - /manager
-        args:
-          - --leader-elect
-          - --health-probe-bind-address=:8081
-        image: controller:latest
-        name: manager
-        ports: []
+      - args:
+          - controller
+          # Manager
+          - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
+          - --leader-elect=$(ENABLE_LEADER_ELECTION)
+          - --health-probe-bind-address=$(HEALTH_PROBE_BIND_ADDRESS)
+          - --enable-http2=$(ENABLE_HTTP2)
+          # Webhook
+          - --webhook-cert-path=$(WEBHOOK_CERT_PATH)
+          - --webhook-cert-name=$(WEBHOOK_CERT_NAME)
+          - --webhook-cert-key=$(WEBHOOK_CERT_KEY)
+          # Metrics
+          - --metrics-secure=$(METRICS_SECURE)
+          - --metrics-cert-path=$(METRICS_CERT_PATH)
+          - --metrics-cert-name=$(METRICS_CERT_NAME)
+          - --metrics-cert-key=$(METRICS_CERT_KEY)
+          # Resend
+          - --resend-api-key=$(RESEND_API_KEY)
+          - --email-from-address=$(EMAIL_FROM_ADDRESS)
+          - --email-reply-to-address=$(EMAIL_REPLY_TO_ADDRESS)
+          # Email controller
+          - --wait-time-before-retry-low-priority-email=$(WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL)
+          - --wait-time-before-retry-normal-priority-email=$(WAIT_TIME_BEFORE_RETRY_NORMAL_PRIORITY_EMAIL)
+          - --wait-time-before-retry-high-priority-email=$(WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL)
+        env:
+          # Manager
+          - name: METRICS_BIND_ADDRESS
+            value: ":8443"
+          - name: ENABLE_LEADER_ELECTION
+            value: "true"
+          - name: HEALTH_PROBE_BIND_ADDRESS
+            value: ":8081"
+          - name: ENABLE_HTTP2
+            value: "false"
+          # Webhook
+          - name: WEBHOOK_CERT_PATH
+            value: certs
+          - name: WEBHOOK_CERT_NAME
+            value: tls.crt
+          - name: WEBHOOK_CERT_KEY
+            value: tls.key
+          # Metrics
+          - name: METRICS_SECURE
+            value: "true"
+          - name: METRICS_CERT_PATH
+            value: certs
+          - name: METRICS_CERT_NAME
+            value: tls.crt
+          - name: METRICS_CERT_KEY
+            value: tls.key
+          # Resend
+          - name: EMAIL_FROM_ADDRESS
+            value: $(EMAIL_FROM_ADDRESS)
+          - name: EMAIL_REPLY_TO_ADDRESS
+            value: $(EMAIL_REPLY_TO_ADDRESS)
+          # Email controller
+          - name: WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL
+            value: $(WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL)
+          - name: WAIT_TIME_BEFORE_RETRY_NORMAL_PRIORITY_EMAIL
+            value: $(WAIT_TIME_BEFORE_RETRY_NORMAL_PRIORITY_EMAIL)
+          - name: WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL
+            value: $(WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL)
+        envFrom:
+          - secretRef:
+              name: resend-api-key
+              key: RESEND_API_KEY
+
+        image: ghcr.io/datum-cloud/email-provider-resend:latest
+        name: controller-manager
+        env:
+        
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

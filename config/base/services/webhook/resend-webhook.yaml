@@ -50,6 +50,7 @@ spec:
           envFrom:
             - secretRef:
                 name: resend-webhook-signing-key
+                key: RESEND_WEBHOOK_SIGNING_KEY
           ports:
             - containerPort: 8443
               name: metrics
