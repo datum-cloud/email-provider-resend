@@ -14,6 +14,8 @@ require go.miloapis.com/milo v0.2.1-0.20250818155242-0665291be72b
 
 require github.com/resend/resend-go/v2 v2.23.0
 
+require github.com/svix/svix-webhooks v1.74.1
+
 require (
 	cel.dev/expr v0.24.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
