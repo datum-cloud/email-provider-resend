@@ -96,7 +96,6 @@ spec:
 
         image: ghcr.io/datum-cloud/email-provider-resend:latest
         name: controller-manager
-        env:
         
         ports:
         - containerPort: 8081
