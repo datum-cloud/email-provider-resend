@@ -92,7 +92,7 @@ spec:
             value: "1s"
         envFrom:
           - secretRef:
-              name: resend-api-key # MUST contain the key RESEND_API_KEY
+              name: resend-keys # MUST contain the key RESEND_API_KEY
 
         image: ghcr.io/datum-cloud/email-provider-resend:latest
         name: controller-manager

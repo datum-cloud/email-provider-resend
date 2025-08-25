@@ -48,7 +48,7 @@ spec:
               value: ":8443"
           envFrom:
             - secretRef:
-                name: resend-webhook-signing-key # MUST contain the key RESEND_WEBHOOK_SIGNING_KEY
+                name: resend-keys # MUST contain the key RESEND_WEBHOOK_SIGNING_KEY
           ports:
             - containerPort: 8443
               name: metrics
