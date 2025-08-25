@@ -30,7 +30,7 @@ spec:
           type: RuntimeDefault
       containers:
       - args:
-          - controller
+          - manager
           # Manager
           - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
           - --leader-elect=$(ENABLE_LEADER_ELECTION)
