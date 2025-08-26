@@ -79,9 +79,9 @@ spec:
             value: tls.key
           # Resend
           - name: EMAIL_FROM_ADDRESS
-            value: $(EMAIL_FROM_ADDRESS)
+            value: support@transactional.datum.net
           - name: EMAIL_REPLY_TO_ADDRESS
-            value: $(EMAIL_REPLY_TO_ADDRESS)
+            value: support@transactional.datum.net
           # Email controller
           - name: WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL
             value: "120s"
