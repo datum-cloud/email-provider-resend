@@ -53,6 +53,9 @@ func createManagerCommand() *cobra.Command {
 	var enableHTTP2 bool
 	var emailApiKey, emailFrom, emailReplyTo string
 	var lowPriorityEmailWait, normalPriorityEmailWait, highPriorityEmailWait time.Duration
+	// Leader election configuration options
+	var leaderElectionID, leaderElectionNamespace, leaderElectionResourceLock string
+	var leaseDuration, renewDeadline, retryPeriod time.Duration
 
 	cmd := &cobra.Command{
 		Use:   "manager",
@@ -68,7 +71,9 @@ func createManagerCommand() *cobra.Command {
 				secureMetrics,
 				enableHTTP2,
 				emailApiKey, emailFrom, emailReplyTo,
-				lowPriorityEmailWait, normalPriorityEmailWait, highPriorityEmailWait)
+				lowPriorityEmailWait, normalPriorityEmailWait, highPriorityEmailWait,
+				leaderElectionID, leaderElectionNamespace, leaderElectionResourceLock,
+				leaseDuration, renewDeadline, retryPeriod)
 		},
 	}
 
@@ -108,6 +113,22 @@ func createManagerCommand() *cobra.Command {
 	cmd.Flags().DurationVar(&highPriorityEmailWait, "wait-time-before-retry-high-priority-email", 1*time.Second,
 		"*Not required. The wait time before retrying a high priority email.")
 
+	// Leader election configuration flags
+	cmd.Flags().StringVar(&leaderElectionID, "leader-election-id", "1adf6d2b.resend.notification.miloapis.com",
+		"The name of the resource that leader election will use for holding the leader lock.")
+	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-election-namespace", "",
+		"Namespace to use for leader election. If empty, the controller will discover the namespace it is running in.")
+	cmd.Flags().StringVar(&leaderElectionResourceLock, "leader-election-resource-lock", "leases",
+		"The type of resource object that is used for locking during leader election. Supported options are 'leases', "+
+			"'endpointsleases' and 'configmapsleases'.")
+	cmd.Flags().DurationVar(&leaseDuration, "leader-election-lease-duration", 15*time.Second,
+		"The duration that non-leader candidates will wait after observing a leadership renewal until attempting to "+
+			"acquire leadership of a led but unrenewed leader slot.")
+	cmd.Flags().DurationVar(&renewDeadline, "leader-election-renew-deadline", 10*time.Second,
+		"The interval between attempts by the acting master to renew a leadership slot before it stops leading.")
+	cmd.Flags().DurationVar(&retryPeriod, "leader-election-retry-period", 2*time.Second,
+		"The duration the clients should wait between attempting acquisition and renewal of a leadership.")
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -129,6 +150,8 @@ func runManager(
 	enableHTTP2 bool,
 	emailApiKey, emailFrom, emailReplyTo string,
 	lowPriorityEmailWait, normalPriorityEmailWait, highPriorityEmailWait time.Duration,
+	leaderElectionID, leaderElectionNamespace, leaderElectionResourceLock string,
+	leaseDuration, renewDeadline, retryPeriod time.Duration,
 ) error {
 	// Create and validate email provider config
 	emailConfig, err := config.NewEmailProviderConfig(emailApiKey, emailFrom, emailReplyTo)
@@ -237,12 +260,17 @@ func runManager(
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "1adf6d2b.resend.notification.miloapis.com",
+		Scheme:                     scheme,
+		Metrics:                    metricsServerOptions,
+		WebhookServer:              webhookServer,
+		HealthProbeBindAddress:     probeAddr,
+		LeaderElection:             enableLeaderElection,
+		LeaderElectionID:           leaderElectionID,
+		LeaderElectionNamespace:    leaderElectionNamespace,
+		LeaderElectionResourceLock: leaderElectionResourceLock,
+		LeaseDuration:              &leaseDuration,
+		RenewDeadline:              &renewDeadline,
+		RetryPeriod:                &retryPeriod,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

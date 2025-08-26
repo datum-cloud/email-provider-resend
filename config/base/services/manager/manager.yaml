@@ -51,6 +51,12 @@ spec:
           - --wait-time-before-retry-low-priority-email=$(WAIT_TIME_BEFORE_RETRY_LOW_PRIORITY_EMAIL)
           - --wait-time-before-retry-normal-priority-email=$(WAIT_TIME_BEFORE_RETRY_NORMAL_PRIORITY_EMAIL)
           - --wait-time-before-retry-high-priority-email=$(WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL)
+          # Leader election
+          - --leader-election-namespace=$(LEADER_ELECTION_NAMESPACE)
+          - --leader-election-id=$(LEADER_ELECTION_ID)
+          - --leader-election-lease-duration=$(LEADER_ELECTION_LEASE_DURATION)
+          - --leader-election-renew-deadline=$(LEADER_ELECTION_RENEW_DEADLINE)
+          - --leader-election-retry-period=$(LEADER_ELECTION_RETRY_PERIOD)
         env:
           # Manager
           - name: METRICS_BIND_ADDRESS
@@ -89,6 +95,17 @@ spec:
             value: "30s"
           - name: WAIT_TIME_BEFORE_RETRY_HIGH_PRIORITY_EMAIL
             value: "1s"
+          # Leader election
+          - name: LEADER_ELECTION_NAMESPACE
+            value: ""
+          - name: LEADER_ELECTION_ID
+            value: 1adf6d2b.resend.notification.miloapis.com
+          - name: LEADER_ELECTION_LEASE_DURATION
+            value: 15s
+          - name: LEADER_ELECTION_RENEW_DEADLINE
+            value: 10s
+          - name: LEADER_ELECTION_RETRY_PERIOD
+            value: 2s
         envFrom:
           - secretRef:
               name: resend-keys # MUST contain the key RESEND_API_KEY
