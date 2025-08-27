@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"os"
 
@@ -98,6 +99,13 @@ func runWebhook(
 			CertName: certFile,
 			KeyName:  keyFile,
 			Port:     webhookPort,
+			// TODO: Reconsider how to add client auth support
+			//
+			// The resend platform will not provide a client cert when connecting to
+			// the webhook endpoint. Disable client cert auth.
+			TLSOpts: []func(*tls.Config){func(t *tls.Config) {
+				t.ClientAuth = tls.NoClientCert
+			}},
 		}),
 	})
 	if err != nil {
