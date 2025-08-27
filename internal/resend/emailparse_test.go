@@ -124,7 +124,7 @@ func TestParseEvent_VariousBodies(t *testing.T) {
 			expectedType: EventTypeClicked,
 			expectedClick: func() *Click {
 				ts, _ := time.Parse(time.RFC3339Nano, "2024-11-24T05:00:57.163Z")
-				return &Click{IPAddress: "1.1.1.1", Link: "https://resend.com", Timestamp: ts, UserAgent: "ua"}
+				return &Click{IPAddress: "1.1.1.1", Link: "https://resend.com", Timestamp: ResendTime{Time: ts}, UserAgent: "ua"}
 			}(),
 			body: `{
 				"type": "email.clicked",

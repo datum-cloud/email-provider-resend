@@ -2,8 +2,47 @@ package resend
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
+
+// ResendTime is a custom time type that can handle multiple timestamp formats from Resend
+type ResendTime struct {
+	time.Time
+}
+
+// UnmarshalJSON implements json.Unmarshaler to handle multiple timestamp formats
+func (rt *ResendTime) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	// List of timestamp formats that Resend uses
+	formats := []string{
+		time.RFC3339,                       // "2006-01-02T15:04:05Z07:00"
+		time.RFC3339Nano,                   // "2006-01-02T15:04:05.999999999Z07:00"
+		"2006-01-02T15:04:05.999999Z07:00", // Variant with 6 digit microseconds
+		"2006-01-02T15:04:05.999999+00:00", // With +00:00 timezone
+		"2006-01-02 15:04:05.999999+00",    // Space instead of T, no colon in timezone
+		"2006-01-02 15:04:05.999999+00:00", // Space instead of T, with colon in timezone
+	}
+
+	// Try to parse with each format
+	for _, format := range formats {
+		if t, err := time.Parse(format, str); err == nil {
+			rt.Time = t
+			return nil
+		}
+	}
+
+	return fmt.Errorf("unable to parse timestamp %q with any known format", str)
+}
+
+// MarshalJSON implements json.Marshaler to output in RFC3339 format
+func (rt ResendTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(rt.Format(time.RFC3339))
+}
 
 // EventType enumerates Resend webhook event types.
 // It corresponds to the `type` field in webhook payloads.
@@ -66,21 +105,21 @@ type Tag struct {
 
 // EmailBase contains the common fields for all email events.
 type EmailBase struct {
-	BroadcastID string    `json:"broadcast_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	EmailID     string    `json:"email_id"`
-	From        string    `json:"from"`
-	To          []string  `json:"to"`
-	Subject     string    `json:"subject"`
-	Tags        []Tag     `json:"tags"`
+	BroadcastID string     `json:"broadcast_id"`
+	CreatedAt   ResendTime `json:"created_at"`
+	EmailID     string     `json:"email_id"`
+	From        string     `json:"from"`
+	To          []string   `json:"to"`
+	Subject     string     `json:"subject"`
+	Tags        []Tag      `json:"tags"`
 }
 
 // Click details for email.clicked event.
 type Click struct {
-	IPAddress string    `json:"ipAddress"`
-	Link      string    `json:"link"`
-	Timestamp time.Time `json:"timestamp"`
-	UserAgent string    `json:"userAgent"`
+	IPAddress string     `json:"ipAddress"`
+	Link      string     `json:"link"`
+	Timestamp ResendTime `json:"timestamp"`
+	UserAgent string     `json:"userAgent"`
 }
 
 // Bounce details for email.bounced event.
@@ -98,7 +137,7 @@ type Failed struct {
 // EventEnvelope is the top-level structure sent by Resend webhooks.
 type EventEnvelope struct {
 	Type      EmailEventType  `json:"type"`
-	CreatedAt time.Time       `json:"created_at"`
+	CreatedAt ResendTime      `json:"created_at"`
 	RawData   json.RawMessage `json:"data"`
 }
 
