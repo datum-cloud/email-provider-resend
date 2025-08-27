@@ -1,0 +1,8 @@
+nameReference:
+  - kind: Service
+    version: v1
+    fieldSpecs:
+      - kind: HTTPRoute
+        group: gateway.networking.k8s.io
+        version: v1beta1
+        path: spec/rules/*/backendRefs/*/name
