@@ -11,13 +11,13 @@ spec:
     app.kubernetes.io/name: resend-webhook
     app.kubernetes.io/part-of: email-provider-resend
   ports:
-    - name: webhook-https
+    - name: webhook
       port: 8090
-      targetPort: 8090
+      targetPort: webhook
       protocol: TCP
     - name: metrics
       port: 8443
-      targetPort: 8443
+      targetPort: metrics
       protocol: TCP
   type: ClusterIP
   sessionAffinity: None

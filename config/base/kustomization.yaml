@@ -11,3 +11,4 @@ resources:
   - rbac
   - services/manager
   - services/webhook
+  - services/ingress/email-provider-resend.yaml
