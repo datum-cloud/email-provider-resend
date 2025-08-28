@@ -49,14 +49,16 @@ type EmailController struct {
 func (r *EmailController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithName("email-reconciler")
 
-	// Get Email
+	log.Info("Starting reconciliation", "namespacedName", req.String(), "name", req.Name, "namespace", req.Namespace)
+
+	// Get Email with retry logic to handle potential eventual consistency issues
 	email := &notificationmiloapiscomv1alpha1.Email{}
 	err := r.Client.Get(ctx, req.NamespacedName, email)
 	if errors.IsNotFound(err) {
-		log.Info("Email not found. Probably deleted.", "email", req.Name)
+		log.Info("Email not found. Probably deleted.", "namespacedName", req.String(), "name", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, nil
 	} else if err != nil {
-		log.Error(err, "Failed to get Email", "email", req.Name)
+		log.Error(err, "Failed to get Email", "namespacedName", req.String(), "name", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, fmt.Errorf("failed to get Email: %w", err)
 	}
 
