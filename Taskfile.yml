@@ -1,0 +1,58 @@
+version: "3"
+
+dotenv: [".env"]  # Load variables automatically from .env at project root
+vars:
+  CERTS_DIR: "certs/webhook"
+
+# Taskfile for local development and testing
+# Requires: https://taskfile.dev
+
+# Usage examples:
+#   EMAIL_API_KEY=yourkey 
+#   EMAIL_PROVIDER_FROM=from@example.com \
+#   EMAIL_PROVIDER_REPLY_TO=reply@example.com task run
+#
+# The run-manager task disables the metrics endpoint (metrics-bind-address=0) and skips any
+# other production-specific settings so you can focus on testing the Email
+# controller logic locally.
+
+tasks:
+  # Run the controller manager locally
+  run-manager:
+    desc: "Run the controller manager locally with minimal settings"
+    cmds:
+      - |
+        
+        go run ./cmd manager \
+          --metrics-bind-address 0 \
+          --email-from-address "$EMAIL_FROM_ADDRESS" \
+          --email-reply-to-address "$EMAIL_REPLY_TO_ADDRESS"
+
+    env:
+      # Propagate the variables set in the shell to Task so they can be used in the
+      # command block above. Values can be provided via the environment or a .env
+      # file.
+      RESEND_API_KEY: "{{.RESEND_API_KEY}}"
+      EMAIL_FROM_ADDRESS: "onboarding@resend.dev"
+      EMAIL_REPLY_TO_ADDRESS: "delivered@resend.dev"
+  
+  # Generate all certificates for webhook server
+  generate-webhook-certs:
+    desc: Generate all certificates for webhook server
+    cmds:
+      - mkdir -p "{{.CERTS_DIR}}" && openssl req -x509 -nodes -newkey rsa:4096 -keyout "{{.CERTS_DIR}}/server.key" -out "{{.CERTS_DIR}}/server.crt" -days 1024 -subj "/CN=webhook.zitadel.svc" -sha256
+
+  # Run the webhook server locally
+  run-webhook:
+    desc: Run the webhook server locally
+    deps:
+      - generate-webhook-certs
+    cmds:
+      - |
+        go run ./cmd resend-webhook \
+          --webhook-port 8443 \
+          --cert-dir "{{.CERTS_DIR}}" \
+          --cert-file "server.crt" \
+          --key-file "server.key" \
+          --metrics-bind-address :8082 
+
