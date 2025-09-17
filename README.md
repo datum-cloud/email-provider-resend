@@ -35,4 +35,4 @@ Complete Kubernetes operator implementation that integrates Resend email servic
 *   Leader election for HA deployments
     
 
-Provides reliable, observable email delivery for the Milo notification system.
+Provides reliable, observable email delivery for the Milo notification system. 
