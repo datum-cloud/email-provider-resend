@@ -10,7 +10,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
-require go.miloapis.com/milo v0.2.1-0.20250828133344-527517c40e60
+require go.miloapis.com/milo v0.4.2-0.20250917205403-84d9e2aca04d
 
 require github.com/resend/resend-go/v2 v2.23.0
 
