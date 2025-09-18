@@ -83,8 +83,10 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 				TemplateRef: notificationmiloapiscomv1alpha1.TemplateReference{
 					Name: "welcome-template",
 				},
-				UserRef: notificationmiloapiscomv1alpha1.EmailUserReference{
-					Name: "user-1",
+				Recipient: notificationmiloapiscomv1alpha1.EmailRecipient{
+					UserRef: notificationmiloapiscomv1alpha1.EmailUserReference{
+						Name: "user-1",
+					},
 				},
 				Priority: notificationmiloapiscomv1alpha1.EmailPriorityNormal,
 			},
@@ -183,6 +185,50 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(res.RequeueAfter).To(gomega.Equal(time.Second))
 			gomega.Expect(fakeProv.callCount).To(gomega.Equal(1))
+		})
+	})
+
+	ginko.Context("when the recipient is specified by email address", func() {
+		ginko.BeforeEach(func() {
+			// Override the recipient to use EmailAddress instead of UserRef
+			emailObj.Spec.Recipient = notificationmiloapiscomv1alpha1.EmailRecipient{
+				EmailAddress: "recipient@example.com",
+			}
+
+			// Rebuild the fake client without needing a User object
+			sch := scheme.Scheme
+			gomega.Expect(iammiloapiscomv1alpha1.AddToScheme(sch)).To(gomega.Succeed())
+			gomega.Expect(notificationmiloapiscomv1alpha1.AddToScheme(sch)).To(gomega.Succeed())
+
+			k8sClient = fake.NewClientBuilder().
+				WithScheme(sch).
+				WithStatusSubresource(&notificationmiloapiscomv1alpha1.Email{}).
+				WithObjects(emailObj.DeepCopy(), &notificationmiloapiscomv1alpha1.EmailTemplate{
+					TypeMeta:   metav1.TypeMeta{APIVersion: "notification.miloapis.com/v1alpha1", Kind: "EmailTemplate"},
+					ObjectMeta: metav1.ObjectMeta{Name: "welcome-template"},
+					Spec:       notificationmiloapiscomv1alpha1.EmailTemplateSpec{Subject: "Welcome"},
+				}).
+				Build()
+
+			// Reset the fake provider call count
+			fakeProv.callCount = 0
+
+			// Recreate the service and controller with the new client
+			service := emailprovider.NewService(fakeProv, "from@example.com", "reply@example.com")
+			conf, err := config.NewEmailControllerConfig(time.Second, time.Second, time.Second)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			controller = &EmailController{Client: k8sClient, EmailProvider: *service, Config: *conf}
+		})
+
+		ginko.It("sends the email and updates the status", func() {
+			res, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(res).To(gomega.Equal(ctrl.Result{}))
+			gomega.Expect(fakeProv.callCount).To(gomega.Equal(1))
+
+			fetched := &notificationmiloapiscomv1alpha1.Email{}
+			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}, fetched)).To(gomega.Succeed())
+			gomega.Expect(fetched.Status.ProviderID).To(gomega.Equal("delivery-123"))
 		})
 	})
 })
