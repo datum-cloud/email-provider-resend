@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	iammiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/iam/v1alpha1"
 	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 
 	emailtemplating "go.miloapis.com/email-provider-resend/internal/emailtemplanting"
@@ -31,7 +30,7 @@ func NewService(provider EmailProvider, from, replyTo string) *Service {
 func (s *Service) Send(ctx context.Context,
 	email *notificationmiloapiscomv1alpha1.Email,
 	template *notificationmiloapiscomv1alpha1.EmailTemplate,
-	userRecipient *iammiloapiscomv1alpha1.User,
+	recipientEmailAddress string,
 ) (SendEmailOutput, error) {
 	// variables are already validated by Milo webhooks
 	// to match the referenced template
@@ -59,7 +58,7 @@ func (s *Service) Send(ctx context.Context,
 	return s.provider.SendEmail(ctx, SendEmailInput{
 		From:           s.from,
 		ReplyTo:        s.replyTo,
-		To:             []string{userRecipient.Spec.Email},
+		To:             []string{recipientEmailAddress},
 		Cc:             email.Spec.CC,
 		Bcc:            email.Spec.BCC,
 		Subject:        subject,
