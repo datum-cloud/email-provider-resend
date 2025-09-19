@@ -62,7 +62,7 @@ func (r *EmailController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, fmt.Errorf("failed to get Email: %w", err)
 	}
 
-	log.Info("Reconciling Email", "email", email.Name, "template", email.Spec.TemplateRef.Name, "user", email.Spec.UserRef.Name)
+	log.Info("Reconciling Email", "email", email.Name, "template", email.Spec.TemplateRef.Name, "recipient", email.Spec.Recipient)
 
 	// Get EmailTemplate
 	emailTemplate := &notificationmiloapiscomv1alpha1.EmailTemplate{} // Cluster scoped resource
@@ -74,18 +74,17 @@ func (r *EmailController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Get EmailRecipient
-	emailRecipient := &iammiloapiscomv1alpha1.User{} // Cluster scoped resource
-	if err = r.Client.Get(ctx, client.ObjectKey{Name: email.Spec.UserRef.Name}, emailRecipient); err != nil {
-		// emailRecipient is warranty to exist. As it is checked on a webhook on Milo.
-		log.Error(err, "Failed to get EmailRecipient", "email", email.Spec.UserRef.Name)
-		return ctrl.Result{}, fmt.Errorf("failed to get EmailRecipient: %w", err)
+	recipientEmailAddress, err := r.getRecipientEmailAddress(ctx, email.DeepCopy())
+	if err != nil {
+		log.Error(err, "Failed to get recipient email address", "email", email.Name)
+		return ctrl.Result{}, fmt.Errorf("failed to get recipient email address: %w", err)
 	}
 
 	if !isEmailAlreadySent(email) {
 		log.Info("Sending email")
 
 		// Send email
-		output, err := r.EmailProvider.Send(ctx, email.DeepCopy(), emailTemplate.DeepCopy(), emailRecipient.DeepCopy())
+		output, err := r.EmailProvider.Send(ctx, email.DeepCopy(), emailTemplate.DeepCopy(), recipientEmailAddress)
 		if err != nil {
 			log.Error(err, "Failed to send email", "email", email.Name)
 			return ctrl.Result{RequeueAfter: r.Config.GetWaitTimeBeforeRetry(email.Spec.Priority)}, nil
@@ -169,4 +168,36 @@ func (r *EmailController) SetupWithManager(mgr ctrl.Manager) error {
 		For(&notificationmiloapiscomv1alpha1.Email{}).
 		Named("email").
 		Complete(r)
+}
+
+func (r *EmailController) getRecipientEmailAddress(ctx context.Context, email *notificationmiloapiscomv1alpha1.Email) (string, error) {
+	log := logf.FromContext(ctx).WithName("email-reconciler")
+
+	if r.hasUserRef(email) {
+		log.Info("Getting recipient email address from user reference")
+		emailRecipient := &iammiloapiscomv1alpha1.User{} // Cluster scoped resource
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: email.Spec.Recipient.UserRef.Name}, emailRecipient); err != nil {
+			// emailRecipient is warranty to exist. As it is checked on a webhook on Milo.
+			log.Error(err, "Failed to get EmailRecipient", "email", email.Spec.Recipient.UserRef.Name)
+			return "", fmt.Errorf("failed to get EmailRecipient: %w", err)
+		}
+		return emailRecipient.Spec.Email, nil
+	}
+
+	if r.hasEmailAddress(email) {
+		log.Info("Getting recipient email address from email address")
+		return email.Spec.Recipient.EmailAddress, nil
+	}
+
+	return "", fmt.Errorf("no recipient found")
+}
+
+// hasUserRef checks if the Email has a user reference as recipient
+func (r *EmailController) hasUserRef(email *notificationmiloapiscomv1alpha1.Email) bool {
+	return email.Spec.Recipient.UserRef.Name != ""
+}
+
+// hasEmailAddress checks if the Email has an email address as recipient
+func (r *EmailController) hasEmailAddress(email *notificationmiloapiscomv1alpha1.Email) bool {
+	return email.Spec.Recipient.EmailAddress != ""
 }
