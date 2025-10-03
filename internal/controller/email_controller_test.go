@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"testing"
-
 	ginko "github.com/onsi/ginkgo/v2"
 	gomega "github.com/onsi/gomega"
 	iammiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/iam/v1alpha1"
@@ -38,12 +36,6 @@ import (
 	"go.miloapis.com/email-provider-resend/internal/emailprovider"
 )
 
-// TestEmailController is the entrypoint for `go test` to execute the Ginkgo suite.
-func TestEmailController(t *testing.T) {
-	gomega.RegisterFailHandler(ginko.Fail)
-	ginko.RunSpecs(t, "Email Controller Suite")
-}
-
 // fakeEmailProvider implements emailprovider.EmailProvider for testing purposes.
 type fakeEmailProvider struct {
 	callCount int
@@ -54,6 +46,34 @@ type fakeEmailProvider struct {
 func (f *fakeEmailProvider) SendEmail(ctx context.Context, input emailprovider.SendEmailInput) (emailprovider.SendEmailOutput, error) {
 	f.callCount++
 	return f.output, f.err
+}
+
+func (f *fakeEmailProvider) CreateContactGroup(ctx context.Context, input emailprovider.CreateContactGroupInput) (emailprovider.CreateContactGroupOutput, error) {
+	return emailprovider.CreateContactGroupOutput{}, nil
+}
+
+func (f *fakeEmailProvider) GetContactGroup(ctx context.Context, input emailprovider.GetContactGroupInput) (emailprovider.GetContactGroupOutput, error) {
+	return emailprovider.GetContactGroupOutput{}, nil
+}
+
+func (f *fakeEmailProvider) DeleteContactGroup(ctx context.Context, input emailprovider.DeleteContactGroupInput) (emailprovider.DeleteContactGroupOutput, error) {
+	return emailprovider.DeleteContactGroupOutput{}, nil
+}
+
+func (f *fakeEmailProvider) ListContactGroups(ctx context.Context) (emailprovider.ListContactGroupsOutput, error) {
+	return emailprovider.ListContactGroupsOutput{}, nil
+}
+
+func (f *fakeEmailProvider) CreateContactGroupMembership(ctx context.Context, input emailprovider.CreateContactGroupMembershipInput) (emailprovider.CreateContactGroupMembershipOutput, error) {
+	return emailprovider.CreateContactGroupMembershipOutput{}, nil
+}
+
+func (f *fakeEmailProvider) GetContactGroupMembershipByEmail(ctx context.Context, input emailprovider.GetContactGroupMembershipByEmailInput) (emailprovider.GetContactGroupMembershipByEmailOutput, error) {
+	return emailprovider.GetContactGroupMembershipByEmailOutput{}, nil
+}
+
+func (f *fakeEmailProvider) DeleteContactGroupMembership(ctx context.Context, input emailprovider.DeleteContactGroupMembershipInput) (emailprovider.DeleteContactGroupMembershipOutput, error) {
+	return emailprovider.DeleteContactGroupMembershipOutput{}, nil
 }
 
 var _ = ginko.Describe("EmailController.Reconcile", func() {
