@@ -2,16 +2,28 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 
+	svix "github.com/svix/svix-webhooks/go"
+	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"go.miloapis.com/email-provider-resend/internal/resend"
+	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type Webhook struct {
+	Handler  Handler
+	Endpoint string
+	svix     *svix.Webhook
+}
+
 type Request struct {
-	Event resend.ParsedEvent
+	EmailEvent   *resend.ParsedEvent
+	ContactEvent *resend.ParsedContactEvent
 }
 
 type Response struct {
@@ -26,6 +38,61 @@ func (f HandlerFunc) Handle(ctx context.Context, req Request) Response {
 
 type Handler interface {
 	Handle(context.Context, Request) Response
+}
+
+// SetupSvix sets svix client in the Webhook struct.
+func (w *Webhook) SetupSvix(svixClient *svix.Webhook) {
+	w.svix = svixClient
+}
+
+const (
+	cgmIndexKey = "contactgroupmembership--statu--providerID"
+)
+
+// SetupIndexes sets up the required field indexes for webhook operations
+func SetupIndexes(mgr ctrl.Manager) error {
+	// Index Email objects by .status.providerID so that the webhook handler can
+	// quickly look them up when processing incoming events.
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&notificationmiloapiscomv1alpha1.Email{},
+		"status.providerID",
+		func(rawObj client.Object) []string {
+			email := rawObj.(*notificationmiloapiscomv1alpha1.Email)
+			if email.Status.ProviderID == "" {
+				return nil
+			}
+			return []string{email.Status.ProviderID}
+		},
+	); err != nil {
+		return fmt.Errorf("failed to createemail  index for providerID: %w", err)
+	}
+
+	// Index ContactGroupMembership objects by .status.providerID so that the webhook handler can
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&notificationmiloapiscomv1alpha1.ContactGroupMembership{},
+		cgmIndexKey,
+		func(rawObj client.Object) []string {
+			contactGroupMembership := rawObj.(*notificationmiloapiscomv1alpha1.ContactGroupMembership)
+			if contactGroupMembership.Status.ProviderID == "" {
+				return nil
+			}
+			return []string{contactGroupMembership.Status.ProviderID}
+		},
+	); err != nil {
+		return fmt.Errorf("failed to createcontact group membership  index for providerID: %w", err)
+	}
+
+	return nil
+}
+
+// SetupWithManager sets up the webhook with the Manager
+func (w *Webhook) SetupWithManager(mgr ctrl.Manager) error {
+	hookServer := mgr.GetWebhookServer()
+	hookServer.Register(w.Endpoint, w)
+
+	return nil
 }
 
 func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -66,18 +133,30 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	emailEvent, err := resend.ParseEmailEvent(body)
-	if err != nil {
-		log.Error(err, "Failed to parse email event")
-		wh.writeResponse(w, BadRequestResponse())
+	// Try to parse as email event first
+	emailEvent, emailErr := resend.ParseEmailEvent(body)
+	if emailErr == nil {
+		response := wh.Handler.Handle(r.Context(), Request{
+			EmailEvent: emailEvent,
+		})
+		wh.writeResponse(w, response)
 		return
 	}
 
-	response := wh.Handler.Handle(r.Context(), Request{
-		Event: *emailEvent,
-	})
+	// If email parsing fails, try to parse as contact event
+	contactEvent, contactErr := resend.ParseContactEvent(body)
+	if contactErr == nil {
+		response := wh.Handler.Handle(r.Context(), Request{
+			ContactEvent: contactEvent,
+		})
+		wh.writeResponse(w, response)
+		return
+	}
 
-	wh.writeResponse(w, response)
+	// If both parsing attempts fail, return bad request
+	log.Error(emailErr, "Failed to parse email event")
+	log.Error(contactErr, "Failed to parse contact event")
+	wh.writeResponse(w, BadRequestResponse())
 }
 
 func (wh *Webhook) writeResponse(w http.ResponseWriter, response Response) {

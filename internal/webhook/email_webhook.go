@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	svix "github.com/svix/svix-webhooks/go"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -18,70 +16,35 @@ import (
 	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 )
 
-type Webhook struct {
-	Handler  Handler
-	Endpoint string
-	svix     *svix.Webhook
-}
-
-// SetupWithManager sets up the webhook with the Manager
-func (w *Webhook) SetupWithManager(mgr ctrl.Manager) error {
-	// Index Email objects by .status.providerID so that the webhook handler can
-	// quickly look them up when processing incoming events.
-	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(),
-		&notificationmiloapiscomv1alpha1.Email{},
-		"status.providerID",
-		func(rawObj client.Object) []string {
-			email := rawObj.(*notificationmiloapiscomv1alpha1.Email)
-			if email.Status.ProviderID == "" {
-				return nil
-			}
-			return []string{email.Status.ProviderID}
-		},
-	); err != nil {
-		return fmt.Errorf("failed to create index for providerID: %w", err)
-	}
-
-	hookServer := mgr.GetWebhookServer()
-	hookServer.Register(w.Endpoint, w)
-
-	return nil
-}
-
-// SetupSvix sets svix client in the Webhook struct.
-func (w *Webhook) SetupSvix(svixClient *svix.Webhook) {
-	w.svix = svixClient
-}
-
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create
 
-func NewResendWebhookV1(k8sClient client.Client) *Webhook {
+func NewResendEmailWebhookV1(k8sClient client.Client) *Webhook {
 	return &Webhook{
 		Handler: HandlerFunc(func(ctx context.Context, req Request) Response {
+			emailEvent := req.EmailEvent
 			log := logf.FromContext(ctx).WithName("resend-webhook")
-			log.Info("Received event", "event", req.Event.Envelope.Type)
+			log.Info("Received event", "event", emailEvent.Envelope.Type)
 
 			// Getting Email CR by ProviderID using the indexed field
 			emails := &notificationmiloapiscomv1alpha1.EmailList{}
-			if err := k8sClient.List(ctx, emails, client.MatchingFields{"status.providerID": req.Event.Base.EmailID}); err != nil {
-				log.Error(err, "Failed to list emails by providerID", "providerID", req.Event.Base.EmailID)
+			if err := k8sClient.List(ctx, emails, client.MatchingFields{"status.providerID": emailEvent.Base.EmailID}); err != nil {
+				log.Error(err, "Failed to list emails by providerID", "providerID", emailEvent.Base.EmailID)
 				return InternalServerErrorResponse()
 			}
 			if len(emails.Items) == 0 {
-				log.Info("No email found with providerID", "providerID", req.Event.Base.EmailID)
+				log.Info("No email found with providerID", "providerID", emailEvent.Base.EmailID)
 				return NotFoundResponse()
 			}
 			email := &emails.Items[0]
 
-			emailCondition := resend.GetEmailCondition(req.Event.Envelope.Type)
+			emailCondition := resend.GetEmailCondition(emailEvent.Envelope.Type)
 
 			// Update email status
 			condition := metav1.Condition{
 				Type:               notificationmiloapiscomv1alpha1.EmailDeliveredCondition,
 				Status:             emailCondition.Status,
 				Reason:             emailCondition.EmailDeliveredReason,
-				Message:            fmt.Sprintf("Updated Email status from webhook event: %s", req.Event.Envelope.Type),
+				Message:            fmt.Sprintf("Updated Email status from webhook event: %s", emailEvent.Envelope.Type),
 				LastTransitionTime: metav1.Now(),
 			}
 			meta.SetStatusCondition(&email.Status.Conditions, condition)
