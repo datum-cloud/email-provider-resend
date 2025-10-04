@@ -67,9 +67,18 @@ func (f *contactGroupMembershipFinalizer) Finalize(ctx context.Context, obj clie
 		return finalizer.Result{}, fmt.Errorf("object is not a ContactGroupMembership")
 	}
 
+	// If deletion is confirmed by email provider, complete the finalizer.
 	if meta.IsStatusConditionTrue(contactGroupMembership.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletedCondition) {
 		log.Info("ContactGroupMembership deletion confirmed by email provider. ContactGroupMembership finalizer completed.")
 		return finalizer.Result{}, nil
+	}
+
+	// If deletion is already pending at the provider, just exit and wait for the confirmation webhook.
+	if cond := meta.FindStatusCondition(contactGroupMembership.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletedCondition); cond != nil {
+		if cond.Status == metav1.ConditionFalse && cond.Reason == notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletePendingReason {
+			log.Info("ContactGroupMembership deletion already pending at email provider; waiting for confirmation webhook.")
+			return finalizer.Result{}, fmt.Errorf("waiting for email provider confirmation webhook to be triggered for ContactGroupMembership deletion")
+		}
 	}
 
 	// Get Referenced ContactGroup
