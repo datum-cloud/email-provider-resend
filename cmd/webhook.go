@@ -27,7 +27,7 @@ func createWebhookCommand() *cobra.Command {
 	var webhookPort int
 	var certDir, certFile, keyFile string
 	var metricsBindAddress string
-	var webhookSigningKey string
+	var webhookSigningKey, contactWebhookSigningKey string
 
 	cmd := &cobra.Command{
 		Use:   "resend-webhook",
@@ -38,7 +38,7 @@ func createWebhookCommand() *cobra.Command {
 				webhookPort,
 				certDir, certFile, keyFile,
 				metricsBindAddress,
-				webhookSigningKey)
+				webhookSigningKey, contactWebhookSigningKey)
 		},
 	}
 
@@ -53,6 +53,7 @@ func createWebhookCommand() *cobra.Command {
 	cmd.Flags().StringVar(&metricsBindAddress, "metrics-bind-address", ":8080", "address the metrics endpoint binds to")
 
 	webhookSigningKey = os.Getenv("RESEND_WEBHOOK_SIGNING_KEY")
+	contactWebhookSigningKey = os.Getenv("RESEND_CONTACT_WEBHOOK_SIGNING_KEY")
 
 	return cmd
 }
@@ -62,7 +63,7 @@ func runWebhook(
 	webhookPort int,
 	certDir, certFile, keyFile string,
 	metricsBindAddress string,
-	webhookSigningKey string) error {
+	webhookSigningKey, contactWebhookSigningKey string) error {
 	logf.SetLogger(zap.New(zap.JSONEncoder()))
 	log := logf.Log.WithName("resend-webhook")
 
@@ -114,18 +115,36 @@ func runWebhook(
 
 	log.Info("Setting up webhook server")
 
-	webhookv1 := webhook.NewResendWebhookV1(mgr.GetClient())
+	// Setup indexes first (shared by all webhooks)
+	if err := webhook.SetupIndexes(mgr); err != nil {
+		return fmt.Errorf("failed to setup indexes: %w", err)
+	}
+
+	// Setup email webhook
+	webhookv1 := webhook.NewResendEmailWebhookV1(mgr.GetClient())
 	err = webhookv1.SetupWithManager(mgr)
 	if err != nil {
 		return fmt.Errorf("failed to setup webhook: %w", err)
 	}
-
 	log.Info("Setting up svix for webhook")
 	svix, err := svixSdk.NewWebhook(webhookSigningKey)
 	if err != nil {
 		return fmt.Errorf("failed to create svix webhook: %w", err)
 	}
 	webhookv1.SetupSvix(svix)
+
+	// Setup contact webhook
+	contactWebhookv1 := webhook.NewResendContactWebhookV1(mgr.GetClient())
+	err = contactWebhookv1.SetupWithManager(mgr)
+	if err != nil {
+		return fmt.Errorf("failed to setup webhook: %w", err)
+	}
+	log.Info("Setting up svix for contact webhook")
+	cwSvix, err := svixSdk.NewWebhook(contactWebhookSigningKey)
+	if err != nil {
+		return fmt.Errorf("failed to create svix webhook: %w", err)
+	}
+	contactWebhookv1.SetupSvix(cwSvix)
 
 	log.Info("Starting manager")
 	return mgr.Start(cmd.Context())

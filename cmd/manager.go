@@ -302,6 +302,40 @@ func runManager(
 	}
 	// +kubebuilder:scaffold:builder
 
+	// Setup contact controller
+	if err := (&controller.ContactController{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Contact")
+		return fmt.Errorf("unable to create controller: %w", err)
+	}
+
+	// Setup contact group controller
+	if err := (&controller.ContactGroupController{
+		Client:        mgr.GetClient(),
+		EmailProvider: *emailProviderService,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ContactGroup")
+		return fmt.Errorf("unable to create controller: %w", err)
+	}
+
+	// Setup contact group membership controller
+	if err := (&controller.ContactGroupMembershipController{
+		Client:        mgr.GetClient(),
+		EmailProvider: *emailProviderService,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ContactGroupMembership")
+		return fmt.Errorf("unable to create controller: %w", err)
+	}
+
+	// Setup contact group membership removal controller
+	if err := (&controller.ContactGroupMembershipRemovalController{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ContactGroupMembershipRemoval")
+		return fmt.Errorf("unable to create controller: %w", err)
+	}
+
 	if metricsCertWatcher != nil {
 		setupLog.Info("Adding metrics certificate watcher to manager")
 		if err := mgr.Add(metricsCertWatcher); err != nil {

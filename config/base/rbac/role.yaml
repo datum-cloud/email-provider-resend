@@ -19,14 +19,61 @@ rules:
 - apiGroups:
   - notification.miloapis.com
   resources:
-  - emails
-  - emailtemplates
+  - contactgroupmembershipremovals
   verbs:
+  - delete
   - get
+  - list
+  - watch
 - apiGroups:
   - notification.miloapis.com
   resources:
+  - contactgroupmemberships
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - notification.miloapis.com
+  resources:
+  - contactgroupmemberships/finalizers
+  - contactgroups/finalizers
+  - contacts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - notification.miloapis.com
+  resources:
+  - contactgroupmemberships/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - notification.miloapis.com
+  resources:
+  - contactgroups
+  - contacts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - notification.miloapis.com
+  resources:
+  - contactgroups/status
+  - contacts/status
   - emails/status
   verbs:
   - get
   - update
+- apiGroups:
+  - notification.miloapis.com
+  resources:
+  - emails
+  - emailtemplates
+  verbs:
+  - get

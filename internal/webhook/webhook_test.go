@@ -41,7 +41,7 @@ func buildScheme(t *testing.T) *runtime.Scheme {
 }
 
 func TestNewResendWebhookV1_Endpoint(t *testing.T) {
-	wh := NewResendWebhookV1(nil)
+	wh := NewResendEmailWebhookV1(nil)
 	expected := "/apis/emailnotification.k8s.io/v1/resend/emails"
 	if wh.Endpoint != expected {
 		t.Fatalf("unexpected endpoint: got %s want %s", wh.Endpoint, expected)
@@ -54,14 +54,14 @@ func TestNewResendWebhookV1_EmailNotFound(t *testing.T) {
 		WithIndex(&notificationv1alpha1.Email{}, "status.providerID", providerIDIndex).
 		Build()
 
-	wh := NewResendWebhookV1(k8sClient)
+	wh := NewResendEmailWebhookV1(k8sClient)
 
 	evt := resend.ParsedEvent{
 		Envelope: resend.EventEnvelope{Type: resend.EventTypeSent},
 		Base:     resend.EmailBase{EmailID: "provider-1"},
 	}
 
-	resp := wh.Handler.Handle(context.TODO(), Request{Event: evt})
+	resp := wh.Handler.Handle(context.TODO(), Request{EmailEvent: &evt})
 	if resp.HttpStatus != http.StatusNotFound {
 		t.Fatalf("expected %d got %d", http.StatusNotFound, resp.HttpStatus)
 	}
@@ -86,14 +86,14 @@ func TestNewResendWebhookV1_SuccessPath(t *testing.T) {
 		WithIndex(&notificationv1alpha1.Email{}, "status.providerID", providerIDIndex).
 		WithObjects(email).Build()
 
-	wh := NewResendWebhookV1(k8sClient)
+	wh := NewResendEmailWebhookV1(k8sClient)
 
 	evt := resend.ParsedEvent{
 		Envelope: resend.EventEnvelope{Type: resend.EventTypeDelivered},
 		Base:     resend.EmailBase{EmailID: "provider-xyz"},
 	}
 
-	resp := wh.Handler.Handle(context.TODO(), Request{Event: evt})
+	resp := wh.Handler.Handle(context.TODO(), Request{EmailEvent: &evt})
 	if resp.HttpStatus != http.StatusOK {
 		t.Fatalf("expected %d got %d", http.StatusOK, resp.HttpStatus)
 	}
