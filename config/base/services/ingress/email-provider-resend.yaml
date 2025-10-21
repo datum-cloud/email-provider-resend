@@ -9,6 +9,7 @@ spec:
       sectionName: resend
   hostnames:
     - resend.staging.env.datum.net
+    - resend.prod.env.datum.net
   rules:
     - matches:
         - path:
