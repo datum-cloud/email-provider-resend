@@ -69,22 +69,13 @@ func (s *Service) Send(ctx context.Context,
 	})
 }
 
-// CreateContactGroupIdempotent creates a contact group on the email provider.
-// This is an indempotent operation. If a contact group with the same display name already exists, it will return the existing contact group.
-func (s *Service) CreateContactGroupIdempotent(ctx context.Context, cg notificationmiloapiscomv1alpha1.ContactGroup) (CreateContactGroupOutput, error) {
+// CreateContactGroup creates a contact group on the email provider.
+func (s *Service) CreateContactGroup(ctx context.Context, cg notificationmiloapiscomv1alpha1.ContactGroup) (CreateContactGroupOutput, error) {
 	displayName := GetDeterministicContactGroupDisplayName(&cg)
-	contactGroup, err := s.GetContactGroupByDisplayName(ctx, displayName)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return s.provider.CreateContactGroup(ctx, CreateContactGroupInput{
-				DisplayName: displayName,
-			})
-		}
-		return CreateContactGroupOutput{}, err
-	}
-	return CreateContactGroupOutput{
-		ContactGroupID: contactGroup.ContactGroupID,
-	}, nil
+	return s.provider.CreateContactGroup(ctx, CreateContactGroupInput{
+		DisplayName: displayName,
+	})
+
 }
 
 // GetContactGroup returns the email provider contact group id of the contact group.

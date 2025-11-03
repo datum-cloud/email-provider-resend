@@ -149,29 +149,6 @@ var _ = ginkgo.Describe("ContactGroupController", func() {
 			gomega.Expect(cond.ObservedGeneration).To(gomega.Equal(int64(2)))
 		})
 	})
-
-	ginkgo.Context("when the contact group already exists on the provider", func() {
-		ginkgo.It("does not create a new group and uses the existing provider ID", func() {
-			// Pre-populate provider with an existing group with the same display name
-			provider.listOut = emailprovider.ListContactGroupsOutput{
-				ContactGroups: []emailprovider.GetContactGroupOutput{{
-					ContactGroupID: "cg-existing",
-					DisplayName:    emailprovider.GetDeterministicContactGroupDisplayName(group),
-				}},
-			}
-
-			_, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: group.Name, Namespace: group.Namespace}})
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-			fetched := &notificationv1.ContactGroup{}
-			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: group.Name, Namespace: group.Namespace}, fetched)).To(gomega.Succeed())
-
-			cond := meta.FindStatusCondition(fetched.Status.Conditions, notificationv1.ContactGroupReadyCondition)
-			gomega.Expect(cond).NotTo(gomega.BeNil())
-			gomega.Expect(fetched.Status.ProviderID).To(gomega.Equal("cg-existing"))
-			gomega.Expect(provider.createdGroups).To(gomega.BeEmpty()) // no create called
-		})
-	})
 })
 
 var _ = ginkgo.Describe("contactGroupFinalizer", func() {
