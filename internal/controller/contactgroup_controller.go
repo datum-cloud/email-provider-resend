@@ -195,7 +195,7 @@ func (r *ContactGroupController) Reconcile(ctx context.Context, req ctrl.Request
 	// First creation – condition not present yet
 	case existingCond == nil:
 		// Create ContactGroup on email provider
-		emailProviderContactGroup, err := r.EmailProvider.CreateContactGroupIdempotent(ctx, *contactGroup)
+		emailProviderContactGroup, err := r.EmailProvider.CreateContactGroup(ctx, *contactGroup)
 		if err != nil {
 			log.Error(err, "Failed to create ContactGroup on email provider")
 			return ctrl.Result{}, fmt.Errorf("failed to create ContactGroup on email provider: %w", err)

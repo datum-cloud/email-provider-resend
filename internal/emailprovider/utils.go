@@ -1,8 +1,6 @@
 package emailprovider
 
 import (
-	"fmt"
-
 	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 )
 
@@ -10,5 +8,5 @@ import (
 // As the email provider does not support namespaces or custom identifiers, we need to use a deterministic name for the contact group
 // stored in the email provider.
 func GetDeterministicContactGroupDisplayName(contactGroup *notificationmiloapiscomv1alpha1.ContactGroup) string {
-	return fmt.Sprintf("%s-%s-%s", contactGroup.Spec.DisplayName, contactGroup.Spec.Visibility, contactGroup.Namespace)
+	return string(contactGroup.UID)
 }
