@@ -63,10 +63,8 @@ type ListContactGroupsOutput struct {
 
 // CreateContactGroupMembershipInput contains the input of the email provider
 type CreateContactGroupMembershipInput struct {
-	ContactGroupID string
-	Email          string
-	GivenName      string
-	FamilyName     string
+	ContactId      string
+	ContactGroupId string
 }
 
 // CreateContactGroupMembershipOutput contains the output of the email provider
@@ -74,27 +72,38 @@ type CreateContactGroupMembershipOutput struct {
 	ContactGroupMembershipID string
 }
 
-// GetContactGroupMembershipByEmailInput contains the input of the email provider
-type GetContactGroupMembershipByEmailInput struct {
-	ContactGroupID string
-	Email          string
-}
-
-// GetContactGroupMembershipByEmailOutput contains the output of the email provider
-type GetContactGroupMembershipByEmailOutput struct {
-	ContactGroupMembershipID string
-}
-
 // DeleteContactGroupMembershipInput contains the input of the email provider
 type DeleteContactGroupMembershipInput struct {
-	ContactGroupMembershipID string
-	ContactGroupId           string
+	ContactId      string
+	ContactGroupId string
 }
 
 // DeleteContactGroupMembershipOutput contains the output of the email provider
 type DeleteContactGroupMembershipOutput struct {
 	ContactGroupMembershipID string
 	Deleted                  bool
+}
+
+// CreateContactInput contains the input of the email provider
+type CreateContactInput struct {
+	Email      string
+	GivenName  string
+	FamilyName string
+}
+
+// CreateContactOutput contains the output of the email provider
+type CreateContactOutput struct {
+	ContactId string
+}
+
+// DeleteContactInput contains the input of the email provider
+type DeleteContactInput struct {
+	ContactId string
+}
+
+// DeleteContactOutput contains the output of the email provider
+type DeleteContactOutput struct {
+	Deleted bool
 }
 
 // EmailProvider defines the contract every e-mail provider (Resend, SES, Mailgun, …) must fulfil.
@@ -105,6 +114,7 @@ type EmailProvider interface {
 	DeleteContactGroup(ctx context.Context, input DeleteContactGroupInput) (DeleteContactGroupOutput, error)
 	ListContactGroups(ctx context.Context) (ListContactGroupsOutput, error)
 	CreateContactGroupMembership(ctx context.Context, input CreateContactGroupMembershipInput) (CreateContactGroupMembershipOutput, error)
-	GetContactGroupMembershipByEmail(ctx context.Context, input GetContactGroupMembershipByEmailInput) (GetContactGroupMembershipByEmailOutput, error)
 	DeleteContactGroupMembership(ctx context.Context, input DeleteContactGroupMembershipInput) (DeleteContactGroupMembershipOutput, error)
+	CreateContact(ctx context.Context, input CreateContactInput) (CreateContactOutput, error)
+	DeleteContact(ctx context.Context, input DeleteContactInput) (DeleteContactOutput, error)
 }

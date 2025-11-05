@@ -10,11 +10,11 @@ require (
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
-require go.miloapis.com/milo v0.4.5-0.20251003143746-b718a6ae1df6
-
-require github.com/resend/resend-go/v2 v2.23.0
+require go.miloapis.com/milo v0.10.2-0.20251105135239-cad118586434
 
 require github.com/svix/svix-webhooks v1.74.1
+
+require github.com/resend/resend-go/v3 v3.0.0
 
 require (
 	cel.dev/expr v0.24.0 // indirect
