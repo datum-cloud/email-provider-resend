@@ -16,56 +16,8 @@ import (
 	finalizerpkg "sigs.k8s.io/controller-runtime/pkg/finalizer"
 
 	"go.miloapis.com/email-provider-resend/internal/emailprovider"
+	"go.miloapis.com/email-provider-resend/internal/emailprovider/mockprovider"
 )
-
-// mockEmailProvider is a minimal implementation of emailprovider.EmailProvider used for unit tests.
-// It records whether certain methods have been called so that we can assert on the reconciliation logic.
-// Only the subset of methods required by the ContactGroup tests are implemented.
-
-type mockEmailProvider struct {
-	// Recorded inputs
-	createdGroups  []emailprovider.CreateContactGroupInput
-	deletedGroupID string
-
-	// Stubbed outputs
-	createOut emailprovider.CreateContactGroupOutput
-	listOut   emailprovider.ListContactGroupsOutput
-}
-
-func (m *mockEmailProvider) SendEmail(ctx context.Context, input emailprovider.SendEmailInput) (emailprovider.SendEmailOutput, error) {
-	panic("not implemented")
-}
-
-func (m *mockEmailProvider) CreateContactGroup(ctx context.Context, input emailprovider.CreateContactGroupInput) (emailprovider.CreateContactGroupOutput, error) {
-	m.createdGroups = append(m.createdGroups, input)
-	return m.createOut, nil
-}
-
-func (m *mockEmailProvider) GetContactGroup(ctx context.Context, input emailprovider.GetContactGroupInput) (emailprovider.GetContactGroupOutput, error) {
-	// Return a stubbed object with the same ID so that the finalizer proceeds with deletion.
-	return emailprovider.GetContactGroupOutput{ContactGroupID: input.ContactGroupID, DisplayName: "whatever"}, nil
-}
-
-func (m *mockEmailProvider) DeleteContactGroup(ctx context.Context, input emailprovider.DeleteContactGroupInput) (emailprovider.DeleteContactGroupOutput, error) {
-	m.deletedGroupID = input.ContactGroupID
-	return emailprovider.DeleteContactGroupOutput{ContactGroupID: input.ContactGroupID, Deleted: true}, nil
-}
-
-func (m *mockEmailProvider) ListContactGroups(ctx context.Context) (emailprovider.ListContactGroupsOutput, error) {
-	return m.listOut, nil
-}
-
-func (m *mockEmailProvider) CreateContactGroupMembership(ctx context.Context, input emailprovider.CreateContactGroupMembershipInput) (emailprovider.CreateContactGroupMembershipOutput, error) {
-	return emailprovider.CreateContactGroupMembershipOutput{}, nil
-}
-
-func (m *mockEmailProvider) GetContactGroupMembershipByEmail(ctx context.Context, input emailprovider.GetContactGroupMembershipByEmailInput) (emailprovider.GetContactGroupMembershipByEmailOutput, error) {
-	return emailprovider.GetContactGroupMembershipByEmailOutput{}, nil
-}
-
-func (m *mockEmailProvider) DeleteContactGroupMembership(ctx context.Context, input emailprovider.DeleteContactGroupMembershipInput) (emailprovider.DeleteContactGroupMembershipOutput, error) {
-	return emailprovider.DeleteContactGroupMembershipOutput{}, nil
-}
 
 var _ = ginkgo.Describe("ContactGroupController", func() {
 	var (
@@ -73,12 +25,12 @@ var _ = ginkgo.Describe("ContactGroupController", func() {
 		k8sClient  client.Client
 		controller *ContactGroupController
 		group      *notificationv1.ContactGroup
-		provider   *mockEmailProvider
+		provider   *mockprovider.MockEmailProvider
 	)
 
 	ginkgo.BeforeEach(func() {
 		ctx = context.Background()
-		provider = &mockEmailProvider{}
+		provider = &mockprovider.MockEmailProvider{}
 		svc := emailprovider.NewService(provider, "from@example.com", "reply@example.com")
 
 		group = &notificationv1.ContactGroup{
@@ -107,8 +59,8 @@ var _ = ginkgo.Describe("ContactGroupController", func() {
 	ginkgo.Context("when the contact group is created for the first time", func() {
 		ginkgo.It("sets the Ready condition and providerID", func() {
 			// Stub provider so that ListContactGroups returns empty, triggering CreateContactGroup.
-			provider.listOut = emailprovider.ListContactGroupsOutput{}
-			provider.createOut = emailprovider.CreateContactGroupOutput{ContactGroupID: "cg-123"}
+			provider.ListContactGroupsOutput = emailprovider.ListContactGroupsOutput{}
+			provider.CreateContactGroupOutput = emailprovider.CreateContactGroupOutput{ContactGroupID: "cg-123"}
 
 			_, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: group.Name, Namespace: group.Namespace}})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
@@ -120,15 +72,15 @@ var _ = ginkgo.Describe("ContactGroupController", func() {
 			gomega.Expect(cond).NotTo(gomega.BeNil())
 			gomega.Expect(cond.Reason).To(gomega.Equal(notificationv1.ContactGroupCreatedReason))
 			gomega.Expect(fetched.Status.ProviderID).To(gomega.Equal("cg-123"))
-			gomega.Expect(provider.createdGroups).To(gomega.HaveLen(1))
+			gomega.Expect(provider.CreatedGroups).To(gomega.HaveLen(1))
 		})
 	})
 
 	ginkgo.Context("when the contact group is updated", func() {
 		ginkgo.It("sets the Updated condition", func() {
 			// First reconcile to create it
-			provider.listOut = emailprovider.ListContactGroupsOutput{}
-			provider.createOut = emailprovider.CreateContactGroupOutput{ContactGroupID: "cg-123"}
+			provider.ListContactGroupsOutput = emailprovider.ListContactGroupsOutput{}
+			provider.CreateContactGroupOutput = emailprovider.CreateContactGroupOutput{ContactGroupID: "cg-123"}
 			_, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: group.Name, Namespace: group.Namespace}})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -158,12 +110,12 @@ var _ = ginkgo.Describe("contactGroupFinalizer", func() {
 		finalizer *contactGroupFinalizer
 		group     *notificationv1.ContactGroup
 		cgm       *notificationv1.ContactGroupMembership
-		provider  *mockEmailProvider
+		provider  *mockprovider.MockEmailProvider
 	)
 
 	ginkgo.BeforeEach(func() {
 		ctx = context.Background()
-		provider = &mockEmailProvider{}
+		provider = &mockprovider.MockEmailProvider{}
 		svc := emailprovider.NewService(provider, "from@example.com", "reply@example.com")
 
 		group = &notificationv1.ContactGroup{
@@ -206,7 +158,7 @@ var _ = ginkgo.Describe("contactGroupFinalizer", func() {
 		list := &notificationv1.ContactGroupMembershipList{}
 		gomega.Expect(k8sClient.List(ctx, list)).To(gomega.Succeed())
 		gomega.Expect(list.Items).To(gomega.BeEmpty())
-		gomega.Expect(provider.deletedGroupID).To(gomega.Equal("cg-123"))
+		gomega.Expect(provider.DeletedGroupID).To(gomega.Equal("cg-123"))
 	})
 
 	ginkgo.It("ignores memberships in other namespaces", func() {
