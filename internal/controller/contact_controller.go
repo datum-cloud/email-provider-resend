@@ -185,9 +185,9 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		log.Info("Contact first creation")
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
-			Status:             metav1.ConditionTrue,
-			Reason:             notificationmiloapiscomv1alpha1.ContactCreatedReason,
-			Message:            "Contact created and added to email provider",
+			Status:             metav1.ConditionFalse,
+			Reason:             notificationmiloapiscomv1alpha1.ContactCreatePendingReason,
+			Message:            "Contact created. Waiting for email provider webhook confirmation",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contact.GetGeneration(),
 		})
