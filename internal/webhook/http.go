@@ -46,7 +46,7 @@ func (w *Webhook) SetupSvix(svixClient *svix.Webhook) {
 }
 
 const (
-	cgmIndexKey = "contactgroupmembership--statu--providerID"
+	contactStatusProviderIDIndexKey = "contact-status-providerID"
 )
 
 // SetupIndexes sets up the required field indexes for webhook operations
@@ -71,14 +71,14 @@ func SetupIndexes(mgr ctrl.Manager) error {
 	// Index ContactGroupMembership objects by .status.providerID so that the webhook handler can
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
-		&notificationmiloapiscomv1alpha1.ContactGroupMembership{},
-		cgmIndexKey,
+		&notificationmiloapiscomv1alpha1.Contact{},
+		contactStatusProviderIDIndexKey,
 		func(rawObj client.Object) []string {
-			contactGroupMembership := rawObj.(*notificationmiloapiscomv1alpha1.ContactGroupMembership)
-			if contactGroupMembership.Status.ProviderID == "" {
+			contact := rawObj.(*notificationmiloapiscomv1alpha1.Contact)
+			if contact.Status.ProviderID == "" {
 				return nil
 			}
-			return []string{contactGroupMembership.Status.ProviderID}
+			return []string{contact.Status.ProviderID}
 		},
 	); err != nil {
 		return fmt.Errorf("failed to createcontact group membership  index for providerID: %w", err)

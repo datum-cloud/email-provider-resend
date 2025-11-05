@@ -207,9 +207,9 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// Update condition
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
-			Status:             metav1.ConditionTrue,
-			Reason:             notificationmiloapiscomv1alpha1.ContactUpdatedReason,
-			Message:            "Contact updated",
+			Status:             metav1.ConditionFalse,
+			Reason:             notificationmiloapiscomv1alpha1.ContactUpdatePendingReason,
+			Message:            "Contact updated. Waiting for email provider webhook confirmation",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contact.GetGeneration(),
 		})
