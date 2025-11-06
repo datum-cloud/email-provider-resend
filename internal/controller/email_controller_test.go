@@ -34,52 +34,13 @@ import (
 
 	"go.miloapis.com/email-provider-resend/internal/config"
 	"go.miloapis.com/email-provider-resend/internal/emailprovider"
+	"go.miloapis.com/email-provider-resend/internal/emailprovider/mockprovider"
 )
-
-// fakeEmailProvider implements emailprovider.EmailProvider for testing purposes.
-type fakeEmailProvider struct {
-	callCount int
-	output    emailprovider.SendEmailOutput
-	err       error
-}
-
-func (f *fakeEmailProvider) SendEmail(ctx context.Context, input emailprovider.SendEmailInput) (emailprovider.SendEmailOutput, error) {
-	f.callCount++
-	return f.output, f.err
-}
-
-func (f *fakeEmailProvider) CreateContactGroup(ctx context.Context, input emailprovider.CreateContactGroupInput) (emailprovider.CreateContactGroupOutput, error) {
-	return emailprovider.CreateContactGroupOutput{}, nil
-}
-
-func (f *fakeEmailProvider) GetContactGroup(ctx context.Context, input emailprovider.GetContactGroupInput) (emailprovider.GetContactGroupOutput, error) {
-	return emailprovider.GetContactGroupOutput{}, nil
-}
-
-func (f *fakeEmailProvider) DeleteContactGroup(ctx context.Context, input emailprovider.DeleteContactGroupInput) (emailprovider.DeleteContactGroupOutput, error) {
-	return emailprovider.DeleteContactGroupOutput{}, nil
-}
-
-func (f *fakeEmailProvider) ListContactGroups(ctx context.Context) (emailprovider.ListContactGroupsOutput, error) {
-	return emailprovider.ListContactGroupsOutput{}, nil
-}
-
-func (f *fakeEmailProvider) CreateContactGroupMembership(ctx context.Context, input emailprovider.CreateContactGroupMembershipInput) (emailprovider.CreateContactGroupMembershipOutput, error) {
-	return emailprovider.CreateContactGroupMembershipOutput{}, nil
-}
-
-func (f *fakeEmailProvider) GetContactGroupMembershipByEmail(ctx context.Context, input emailprovider.GetContactGroupMembershipByEmailInput) (emailprovider.GetContactGroupMembershipByEmailOutput, error) {
-	return emailprovider.GetContactGroupMembershipByEmailOutput{}, nil
-}
-
-func (f *fakeEmailProvider) DeleteContactGroupMembership(ctx context.Context, input emailprovider.DeleteContactGroupMembershipInput) (emailprovider.DeleteContactGroupMembershipOutput, error) {
-	return emailprovider.DeleteContactGroupMembershipOutput{}, nil
-}
 
 var _ = ginko.Describe("EmailController.Reconcile", func() {
 	var (
 		ctx        context.Context
-		fakeProv   *fakeEmailProvider
+		fakeProv   *mockprovider.MockEmailProvider
 		controller *EmailController
 		emailObj   *notificationmiloapiscomv1alpha1.Email
 		k8sClient  client.Client
@@ -153,8 +114,8 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 			Build()
 
 		// Setup the fake provider wrapped by the Service abstraction used by the controller
-		fakeProv = &fakeEmailProvider{
-			output: emailprovider.SendEmailOutput{DeliveryID: "delivery-123"},
+		fakeProv = &mockprovider.MockEmailProvider{
+			SendEmailOutput: emailprovider.SendEmailOutput{DeliveryID: "delivery-123"},
 		}
 		service := emailprovider.NewService(fakeProv, "from@example.com", "reply@example.com")
 
@@ -174,7 +135,7 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 			res, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(res).To(gomega.Equal(ctrl.Result{}))
-			gomega.Expect(fakeProv.callCount).To(gomega.Equal(1)) // One call to the provider
+			gomega.Expect(fakeProv.SendEmailCallCount).To(gomega.Equal(1)) // One call to the provider
 
 			fetched := &notificationmiloapiscomv1alpha1.Email{}
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}, fetched)).To(gomega.Succeed())
@@ -193,18 +154,18 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 			res, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(res).To(gomega.Equal(ctrl.Result{}))
-			gomega.Expect(fakeProv.callCount).To(gomega.Equal(0)) // No call to the provider
+			gomega.Expect(fakeProv.SendEmailCallCount).To(gomega.Equal(0)) // No call to the provider
 		})
 	})
 
 	ginko.Context("when the provider returns an error", func() {
 		ginko.It("requeues the reconcile after the configured delay", func() {
-			fakeProv.err = fmt.Errorf("provider failure")
+			fakeProv.SendEmailErr = fmt.Errorf("provider failure")
 
 			res, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(res.RequeueAfter).To(gomega.Equal(time.Second))
-			gomega.Expect(fakeProv.callCount).To(gomega.Equal(1))
+			gomega.Expect(fakeProv.SendEmailCallCount).To(gomega.Equal(1))
 		})
 	})
 
@@ -231,7 +192,7 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 				Build()
 
 			// Reset the fake provider call count
-			fakeProv.callCount = 0
+			fakeProv.SendEmailCallCount = 0
 
 			// Recreate the service and controller with the new client
 			service := emailprovider.NewService(fakeProv, "from@example.com", "reply@example.com")
@@ -244,7 +205,7 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 			res, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(res).To(gomega.Equal(ctrl.Result{}))
-			gomega.Expect(fakeProv.callCount).To(gomega.Equal(1))
+			gomega.Expect(fakeProv.SendEmailCallCount).To(gomega.Equal(1))
 
 			fetched := &notificationmiloapiscomv1alpha1.Email{}
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}, fetched)).To(gomega.Succeed())
