@@ -62,15 +62,16 @@ func NewResendContactWebhookV1(k8sClient client.Client) *Webhook {
 				}
 			case resend.ContactDeleted:
 				if updatedCond != nil && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactUpdatePendingReason {
-					// Update condition
-					meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
+					// Confirm previously pending update instead of marking deleted.
+					condition = metav1.Condition{
 						Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
 						Status:             metav1.ConditionTrue,
 						Reason:             notificationmiloapiscomv1alpha1.ContactUpdatedReason,
 						Message:            "Contact update confirmed by email provider webhook",
 						LastTransitionTime: metav1.Now(),
 						ObservedGeneration: contact.GetGeneration(),
-					})
+					}
+
 				} else {
 					condition = metav1.Condition{
 						Type:               notificationmiloapiscomv1alpha1.ContactDeletedCondition,
