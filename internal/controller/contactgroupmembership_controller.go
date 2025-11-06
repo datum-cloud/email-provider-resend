@@ -67,20 +67,6 @@ func (f *contactGroupMembershipFinalizer) Finalize(ctx context.Context, obj clie
 		return finalizer.Result{}, fmt.Errorf("object is not a ContactGroupMembership")
 	}
 
-	// If deletion is confirmed by email provider, complete the finalizer.
-	if meta.IsStatusConditionTrue(contactGroupMembership.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletedCondition) {
-		log.Info("ContactGroupMembership deletion confirmed by email provider. ContactGroupMembership finalizer completed.")
-		return finalizer.Result{}, nil
-	}
-
-	// If deletion is already pending at the provider, just exit and wait for the confirmation webhook.
-	if cond := meta.FindStatusCondition(contactGroupMembership.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletedCondition); cond != nil {
-		if cond.Status == metav1.ConditionFalse && cond.Reason == notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletePendingReason {
-			log.Info("ContactGroupMembership deletion already pending at email provider; waiting for confirmation webhook.")
-			return finalizer.Result{}, fmt.Errorf("waiting for email provider confirmation webhook to be triggered for ContactGroupMembership deletion")
-		}
-	}
-
 	// Get Referenced ContactGroup
 	contactGroup := &notificationmiloapiscomv1alpha1.ContactGroup{}
 	err := f.Client.Get(ctx, client.ObjectKey{Name: contactGroupMembership.Spec.ContactGroupRef.Name, Namespace: contactGroupMembership.Spec.ContactGroupRef.Namespace}, contactGroup)
@@ -89,8 +75,16 @@ func (f *contactGroupMembershipFinalizer) Finalize(ctx context.Context, obj clie
 		return finalizer.Result{}, fmt.Errorf("failed to get ContactGroup: %w", err)
 	}
 
+	// Get Referenced Contact
+	contact := &notificationmiloapiscomv1alpha1.Contact{}
+	err = f.Client.Get(ctx, client.ObjectKey{Name: contactGroupMembership.Spec.ContactRef.Name, Namespace: contactGroupMembership.Spec.ContactRef.Namespace}, contact)
+	if err != nil {
+		log.Error(err, "Failed to get Contact")
+		return finalizer.Result{}, fmt.Errorf("failed to get Contact: %w", err)
+	}
+
 	// Delete ContactGroupMembership from email provider
-	delResult, err := f.EmailProvider.DeleteContactGroupMembershipIdempotent(ctx, *contactGroupMembership, *contactGroup)
+	deleted, err := f.EmailProvider.DeleteContactGroupMembershipIdempotent(ctx, *contactGroup, *contact)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("ContactGroupMembership not found on email provider. Probably deleted. ContactGroupMembership finalizer completed.")
@@ -99,29 +93,12 @@ func (f *contactGroupMembershipFinalizer) Finalize(ctx context.Context, obj clie
 		log.Error(err, "Failed to delete ContactGroupMembership from email provider")
 		return finalizer.Result{}, fmt.Errorf("failed to delete ContactGroupMembership from email provider: %w", err)
 	}
-	if !delResult.Deleted {
-		log.Error(fmt.Errorf("failed to delete ContactGroupMembership from email provider. Expected deleted to be true, got %t", delResult.Deleted), "Failed to delete ContactGroupMembership from email provider")
-		return finalizer.Result{}, fmt.Errorf("failed to delete ContactGroupMembership from email provider. Expected deleted to be true, got %t", delResult.Deleted)
-	} else {
-		// Update ContactGroupMembership status to pending deletion on email provider
-		meta.SetStatusCondition(&contactGroupMembership.Status.Conditions, metav1.Condition{
-			Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletedCondition,
-			Status:             metav1.ConditionFalse,
-			Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletePendingReason,
-			Message:            "ContactGroupMembership delete pending, waiting for email provider confirmation webhook to be triggered",
-			LastTransitionTime: metav1.Now(),
-		})
-		if err := f.Client.Status().Update(ctx, contactGroupMembership); err != nil {
-			log.Error(err, "Failed to update ContactGroupMembership status")
-			return finalizer.Result{}, fmt.Errorf("failed to update ContactGroupMembership status: %w", err)
-		}
-
+	if !deleted.Deleted {
+		log.Error(fmt.Errorf("failed to delete ContactGroupMembership from email provider. Expected deleted to be true, got %t", deleted.Deleted), "Failed to delete ContactGroupMembership from email provider")
+		return finalizer.Result{}, fmt.Errorf("failed to delete ContactGroupMembership from email provider. Expected deleted to be true, got %t", deleted.Deleted)
 	}
 
-	log.Info("Waiting for email provider confirmation webhook to be triggered for ContactGroupMembership deletion")
-	// We just return the error, as we need to wait for the email provider confirmation webhook to be triggered
-	// Getting the resource again would not help for validation purposes will fail, as the webhook takes some time to trigger
-	return finalizer.Result{}, fmt.Errorf("waiting for email provider confirmation webhook to be triggered for ContactGroupMembership deletion")
+	return finalizer.Result{}, nil
 }
 
 // +kubebuilder:rbac:groups=notification.miloapis.com,resources=contactgroupmemberships,verbs=get;list;watch;create;update
@@ -196,9 +173,9 @@ func (r *ContactGroupMembershipController) Reconcile(ctx context.Context, req ct
 		contactGroupMembership.Status.ProviderID = emailProviderContactGroupMembership.ContactGroupMembershipID
 		meta.SetStatusCondition(&contactGroupMembership.Status.Conditions, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipReadyCondition,
-			Status:             metav1.ConditionFalse,
-			Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipCreatePendingReason,
-			Message:            "ContactGroupMembership create pending, waiting for email provider confirmation webhook to be triggered",
+			Status:             metav1.ConditionTrue,
+			Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipCreatedReason,
+			Message:            "ContactGroupMembership created and synced with email provider",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contactGroupMembership.GetGeneration(),
 		})
@@ -206,20 +183,22 @@ func (r *ContactGroupMembershipController) Reconcile(ctx context.Context, req ct
 	// Update requested – Updated condition is False with the specific reason
 	case updatedCond != nil && updatedCond.Status == metav1.ConditionFalse && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdateRequestedReason:
 		log.Info("ContactGroupMembership update requested")
-		// Update ContactGroupMembership on email provider
-		emailProviderContactGroupMembership, err := r.EmailProvider.UpdateContactGroupMembership(ctx, *contactGroupMembership, *contactGroup, *contact)
+		// Create ContactGroupMembership on email provider again
+		// As Resend does not supports updating the Contact email address, on Contact update, the contact has been deleted (which removes the Contacts from all ContactGroups on resend side),
+		// and created again with the new email address, so we need to create the ContactGroupMembership again.
+		emailProviderContactGroupMembership, err := r.EmailProvider.CreateContactGroupMembershipIdempotent(ctx, *contactGroup, *contact)
 		if err != nil {
 			log.Error(err, "Failed to update ContactGroupMembership on email provider")
 			return ctrl.Result{}, fmt.Errorf("failed to update ContactGroupMembership on email provider: %w", err)
 		}
 		contactGroupMembership.Status.ProviderID = emailProviderContactGroupMembership.ContactGroupMembershipID
 
-		// Update ContactGroupMembership status to pending. This will avoid multiple updates to the email provider.
+		// Update ContactGroupMembership status to updated. This will avoid multiple updates to the email provider.
 		meta.SetStatusCondition(&contactGroupMembership.Status.Conditions, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdatedCondition,
-			Status:             metav1.ConditionFalse,
-			Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdatePendingReason,
-			Message:            "ContactGroupMembership update pending, waiting for email provider confirmation webhook to be triggered",
+			Status:             metav1.ConditionTrue,
+			Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdatedReason,
+			Message:            "ContactGroupMembership updated, and synced with email provider",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contactGroupMembership.GetGeneration(),
 		})
