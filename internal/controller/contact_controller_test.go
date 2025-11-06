@@ -80,8 +80,8 @@ var _ = ginkgo.Describe("ContactController", func() {
 
 			cond := meta.FindStatusCondition(fetched.Status.Conditions, notificationv1.ContactReadyCondition)
 			gomega.Expect(cond).NotTo(gomega.BeNil())
-			gomega.Expect(cond.Reason).To(gomega.Equal(notificationv1.ContactCreatedReason))
-			gomega.Expect(cond.Status).To(gomega.Equal(metav1.ConditionTrue))
+			gomega.Expect(cond.Reason).To(gomega.Equal(notificationv1.ContactCreatePendingReason))
+			gomega.Expect(cond.Status).To(gomega.Equal(metav1.ConditionFalse))
 
 			// provider call assertions
 			gomega.Expect(prov.CreateContactCallCount).To(gomega.Equal(1))

@@ -68,10 +68,14 @@ func (f *contactFinalizer) Finalize(ctx context.Context, obj client.Object) (fin
 	}
 
 	// Delete Contact on email provider
-	_, err := f.EmailProvider.DeleteContact(ctx, *contact)
+	deleted, err := f.EmailProvider.DeleteContact(ctx, *contact)
 	if err != nil && !errors.IsNotFound(err) {
 		log.Error(err, "Failed to delete Contact on email provider")
 		return finalizer.Result{}, fmt.Errorf("failed to delete Contact on email provider: %w", err)
+	}
+	if err == nil && !deleted.Deleted {
+		log.Error(fmt.Errorf("failed to delete Contact on email provider. Expected deleted to be true, got %t", deleted.Deleted), "Failed to delete Contact on email provider")
+		return finalizer.Result{}, fmt.Errorf("failed to delete Contact on email provider. Expected deleted to be true, got %t", deleted.Deleted)
 	}
 
 	// Get associated ContactGroupMemberships to contact name
