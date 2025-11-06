@@ -26,56 +26,86 @@ func NewResendContactWebhookV1(k8sClient client.Client) *Webhook {
 			log.Info("Received event", "event", contactEvent.Envelope.Type)
 
 			// Getting Contact CR by ProviderID using the indexed field
-			cgms := &notificationmiloapiscomv1alpha1.ContactGroupMembershipList{}
-			if err := k8sClient.List(ctx, cgms, client.MatchingFields{cgmIndexKey: contactEvent.Contact.ID}); err != nil {
+			contacts := &notificationmiloapiscomv1alpha1.ContactList{}
+			if err := k8sClient.List(ctx, contacts, client.MatchingFields{contactStatusProviderIDIndexKey: contactEvent.Contact.ID}); err != nil {
 				log.Error(err, "Failed to list contacts by providerID", "providerID", contactEvent.Contact.ID)
 				return InternalServerErrorResponse()
 			}
-			if len(cgms.Items) == 0 {
-				log.Info("No contact group membership found with providerID", "providerID", contactEvent.Contact.ID)
-				return NotFoundResponse()
+			if len(contacts.Items) == 0 {
+				log.Info("No contact found with providerID. Probably deleted.", "providerID", contactEvent.Contact.ID)
+				return OkResponse()
 			}
-			contactGroupMembership := &cgms.Items[0]
+			contact := &contacts.Items[0]
+
+			updatedCond := meta.FindStatusCondition(contact.Status.Conditions, notificationmiloapiscomv1alpha1.ContactUpdatedCondition)
 
 			// Update contact status
 			condition := metav1.Condition{}
 			switch contactEvent.Envelope.Type {
 			case resend.ContactCreated:
 				condition = metav1.Condition{
-					Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipReadyCondition,
+					Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
 					Status:             metav1.ConditionTrue,
-					Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipCreatedReason,
-					Message:            "Contact group membership creation confirmed by email provider webhook",
+					Reason:             notificationmiloapiscomv1alpha1.ContactCreatedReason,
+					Message:            "Contact creation confirmed by email provider webhook",
 					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: contact.GetGeneration(),
 				}
 			case resend.ContactUpdated:
-				condition = metav1.Condition{
-					Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdatedCondition,
-					Status:             metav1.ConditionTrue,
-					Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdatedReason,
-					Message:            "Contact group membership update confirmed by email provider webhook",
-					LastTransitionTime: metav1.Now(),
+				if updatedCond != nil && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactUpdatePendingReason {
+					// Confirm previously pending update instead of marking deleted.
+					condition = metav1.Condition{
+						Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
+						Status:             metav1.ConditionTrue,
+						Reason:             notificationmiloapiscomv1alpha1.ContactUpdatedReason,
+						Message:            "Contact update confirmed by email provider webhook",
+						LastTransitionTime: metav1.Now(),
+						ObservedGeneration: contact.GetGeneration(),
+					}
+				} else {
+					condition = metav1.Condition{
+						Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
+						Status:             metav1.ConditionTrue,
+						Reason:             notificationmiloapiscomv1alpha1.ContactUpdatedReason,
+						Message:            "Contact update confirmed by email provider webhook",
+						LastTransitionTime: metav1.Now(),
+						ObservedGeneration: contact.GetGeneration(),
+					}
 				}
 			case resend.ContactDeleted:
-				condition = metav1.Condition{
-					Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletedCondition,
-					Status:             metav1.ConditionTrue,
-					Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipDeletedReason,
-					Message:            "Contact group membership deletion confirmed by email provider webhook",
-					LastTransitionTime: metav1.Now(),
+				if updatedCond != nil && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactUpdatePendingReason {
+					// Confirm previously pending update instead of marking deleted.
+					condition = metav1.Condition{
+						Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
+						Status:             metav1.ConditionTrue,
+						Reason:             notificationmiloapiscomv1alpha1.ContactUpdatedReason,
+						Message:            "Contact update confirmed by email provider webhook",
+						LastTransitionTime: metav1.Now(),
+						ObservedGeneration: contact.GetGeneration(),
+					}
+				} else {
+					condition = metav1.Condition{
+						Type:               notificationmiloapiscomv1alpha1.ContactDeletedCondition,
+						Status:             metav1.ConditionTrue,
+						Reason:             notificationmiloapiscomv1alpha1.ContactDeletedReason,
+						Message:            "Contact deletion confirmed by email provider webhook",
+						LastTransitionTime: metav1.Now(),
+						ObservedGeneration: contact.GetGeneration(),
+					}
 				}
 			}
-			meta.SetStatusCondition(&contactGroupMembership.Status.Conditions, condition)
-			if err := k8sClient.Status().Update(ctx, contactGroupMembership); err != nil {
-				log.Error(err, "Failed to update ContactGroupMembership status", "contactGroupMembership", contactGroupMembership.Name)
+
+			meta.SetStatusCondition(&contact.Status.Conditions, condition)
+			if err := k8sClient.Status().Update(ctx, contact); err != nil {
+				log.Error(err, "Failed to update Contact status", "contactGroupMembership", contact.Name)
 				return InternalServerErrorResponse()
 			}
 
 			// Emit Kubernetes Event for observability
 			webhookEvent := &eventsv1.Event{
 				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: fmt.Sprintf("%s-", contactGroupMembership.Name),
-					Namespace:    contactGroupMembership.Namespace,
+					GenerateName: fmt.Sprintf("%s-", contact.Name),
+					Namespace:    contact.Namespace,
 				},
 				Action:              "Update",
 				Reason:              condition.Reason,
@@ -85,20 +115,20 @@ func NewResendContactWebhookV1(k8sClient client.Client) *Webhook {
 				ReportingController: "email-provider-resend-webhook",
 				ReportingInstance:   "email-provider-resend-webhook-1",
 				Regarding: corev1.ObjectReference{
-					Kind:            "ContactGroupMembership",
-					Namespace:       contactGroupMembership.Namespace,
-					Name:            contactGroupMembership.Name,
-					UID:             contactGroupMembership.UID,
-					ResourceVersion: contactGroupMembership.ResourceVersion,
-					APIVersion:      contactGroupMembership.APIVersion,
+					Kind:            "Contact",
+					Namespace:       contact.Namespace,
+					Name:            contact.Name,
+					UID:             contact.UID,
+					ResourceVersion: contact.ResourceVersion,
+					APIVersion:      contact.APIVersion,
 				},
 			}
 			if err := k8sClient.Create(ctx, webhookEvent); err != nil {
-				log.Error(err, "Failed to create ContactGroupMembership event", "contactGroupMembership", contactGroupMembership.Name)
+				log.Error(err, "Failed to create ContactGroupMembership event", "contact", contact.Name)
 				return InternalServerErrorResponse()
 			}
 
-			log.Info("Updated ContactGroupMembership status from webhook", "contactGroupMembership", contactGroupMembership.Name, "condition", condition)
+			log.Info("Updated Contact status from webhook", "contact", contact.Name, "condition", condition)
 
 			return OkResponse()
 		}),

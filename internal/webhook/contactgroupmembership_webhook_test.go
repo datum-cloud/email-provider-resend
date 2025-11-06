@@ -16,13 +16,13 @@ import (
 	crtclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// cgmProviderIDIndex extracts the ContactGroupMembership.Status.ProviderID for field indexing.
-func cgmProviderIDIndex(o crtclient.Object) []string {
-	cgm := o.(*notificationv1alpha1.ContactGroupMembership)
-	if cgm.Status.ProviderID == "" {
+// contactProviderIDIndex extracts the Contact.Status.ProviderID for field indexing.
+func contactProviderIDIndex(o crtclient.Object) []string {
+	contact := o.(*notificationv1alpha1.Contact)
+	if contact.Status.ProviderID == "" {
 		return nil
 	}
-	return []string{cgm.Status.ProviderID}
+	return []string{contact.Status.ProviderID}
 }
 
 func buildContactScheme(t *testing.T) *runtime.Scheme {
@@ -51,7 +51,7 @@ func TestNewResendContactWebhookV1_Endpoint(t *testing.T) {
 func TestNewResendContactWebhookV1_CGMNotFound(t *testing.T) {
 	scheme := buildContactScheme(t)
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).
-		WithIndex(&notificationv1alpha1.ContactGroupMembership{}, cgmIndexKey, cgmProviderIDIndex).
+		WithIndex(&notificationv1alpha1.Contact{}, contactStatusProviderIDIndexKey, contactProviderIDIndex).
 		Build()
 
 	wh := NewResendContactWebhookV1(k8sClient)
@@ -70,21 +70,21 @@ func TestNewResendContactWebhookV1_CGMNotFound(t *testing.T) {
 func TestNewResendContactWebhookV1_SuccessPath(t *testing.T) {
 	scheme := buildContactScheme(t)
 
-	cgm := &notificationv1alpha1.ContactGroupMembership{
-		TypeMeta: metav1.TypeMeta{APIVersion: notificationv1alpha1.SchemeGroupVersion.String(), Kind: "ContactGroupMembership"},
+	contact := &notificationv1alpha1.Contact{
+		TypeMeta: metav1.TypeMeta{APIVersion: notificationv1alpha1.SchemeGroupVersion.String(), Kind: "Contact"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cgm",
+			Name:      "test-contact",
 			Namespace: "default",
 		},
-		Status: notificationv1alpha1.ContactGroupMembershipStatus{
+		Status: notificationv1alpha1.ContactStatus{
 			ProviderID: "provider-xyz",
 		},
 	}
 
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).
-		WithStatusSubresource(&notificationv1alpha1.ContactGroupMembership{}).
-		WithIndex(&notificationv1alpha1.ContactGroupMembership{}, cgmIndexKey, cgmProviderIDIndex).
-		WithObjects(cgm).Build()
+		WithStatusSubresource(&notificationv1alpha1.Contact{}).
+		WithIndex(&notificationv1alpha1.Contact{}, contactStatusProviderIDIndexKey, contactProviderIDIndex).
+		WithObjects(contact).Build()
 
 	wh := NewResendContactWebhookV1(k8sClient)
 
@@ -99,16 +99,16 @@ func TestNewResendContactWebhookV1_SuccessPath(t *testing.T) {
 	}
 
 	// Verify CGM status was updated
-	updated := &notificationv1alpha1.ContactGroupMembership{}
-	if err := k8sClient.Get(context.TODO(), crtclient.ObjectKey{Namespace: "default", Name: "test-cgm"}, updated); err != nil {
-		t.Fatalf("failed to fetch updated contact group membership: %v", err)
+	updated := &notificationv1alpha1.Contact{}
+	if err := k8sClient.Get(context.TODO(), crtclient.ObjectKey{Namespace: "default", Name: "test-contact"}, updated); err != nil {
+		t.Fatalf("failed to fetch updated contact: %v", err)
 	}
 	if len(updated.Status.Conditions) == 0 {
 		t.Fatalf("expected at least 1 condition, got 0")
 	}
 	found := false
 	for _, c := range updated.Status.Conditions {
-		if c.Type == notificationv1alpha1.ContactGroupMembershipReadyCondition && c.Status == metav1.ConditionTrue {
+		if c.Type == notificationv1alpha1.ContactReadyCondition && c.Status == metav1.ConditionTrue {
 			found = true
 			break
 		}
