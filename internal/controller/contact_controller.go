@@ -196,8 +196,18 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			ObservedGeneration: contact.GetGeneration(),
 		})
 
+		// Set ContactUpdatedCondition to true to indicate that the contact is ready to accept incoming updates
+		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
+			Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
+			Status:             metav1.ConditionTrue,
+			Reason:             notificationmiloapiscomv1alpha1.ContactCreatedReason,
+			Message:            "Contact created. Contact is ready to accept incoming updates",
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: contact.GetGeneration(),
+		})
+
 	// Update – generation changed since we last processed the object
-	case updatedCond == nil || updatedCond.ObservedGeneration != contact.GetGeneration():
+	case updatedCond != nil && updatedCond.ObservedGeneration != contact.GetGeneration():
 		log.Info("Contact updated")
 
 		// Update Contact on email provider
