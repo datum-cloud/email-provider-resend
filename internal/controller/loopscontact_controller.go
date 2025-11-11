@@ -29,15 +29,19 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/finalizer"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
 	loopsContactFinalizerKey = "notification.miloapis.com/loops-contact"
-	loopsContactIndexKey = "loopscontact-index"
+	loopsContactIndexKey     = "loopscontact-index"
 )
 
 const (
@@ -64,10 +68,10 @@ const (
 
 // LoopsContactReconciler reconciles a LoopsContact object
 type LoopsContactController struct {
-	Client     client.Client
-	Finalizers finalizer.Finalizers
-	Loops      emailprovider.LoopsEmail
-	NewsLetterListId string
+	Client                   client.Client
+	Finalizers               finalizer.Finalizers
+	Loops                    emailprovider.LoopsEmail
+	NewsLetterListId         string
 	NewsletterContactGroupId string
 }
 
@@ -264,6 +268,24 @@ func (r *LoopsContactController) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&notificationmiloapiscomv1alpha1.Contact{}).
+		// Watch ContactGroupMembership changes and enqueue reconcile requests for referenced Contacts
+		WatchesRawSource(
+			source.Kind(
+				mgr.GetCache(),
+				&notificationmiloapiscomv1alpha1.ContactGroupMembership{},
+				handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, cgm *notificationmiloapiscomv1alpha1.ContactGroupMembership) []reconcile.Request {
+					if cgm.Spec.ContactRef.Name == "" || cgm.Spec.ContactRef.Namespace == "" {
+						return nil
+					}
+					return []reconcile.Request{
+						{NamespacedName: types.NamespacedName{
+							Name:      cgm.Spec.ContactRef.Name,
+							Namespace: cgm.Spec.ContactRef.Namespace,
+						}},
+					}
+				}),
+			),
+		).
 		Named("loopscontact").
 		Complete(r)
 }
@@ -370,7 +392,7 @@ func (r *LoopsContactController) addToNewsLetterList(ctx context.Context, contac
 		Type:               NewsLetterAddedCondition,
 		Status:             metav1.ConditionTrue,
 		Reason:             NewsLetterAddedReason,
-		Message:            "Contact added to Newsletter list as contact created from newsletter form",
+		Message:            "Contact added to Newsletter list on email provider.",
 		LastTransitionTime: metav1.Now(),
 		ObservedGeneration: contact.GetGeneration(),
 	})
@@ -380,9 +402,8 @@ func (r *LoopsContactController) addToNewsLetterList(ctx context.Context, contac
 
 // isNewsletterContact returns true if the contact name starts with "newsletter-".
 func (r *LoopsContactController) isNewsletterContact(contact *notificationmiloapiscomv1alpha1.Contact) bool {
-	return strings.HasPrefix(contact.Name, "newsletter-") 
+	return strings.HasPrefix(contact.Name, "newsletter-")
 }
-
 
 func (r *LoopsContactController) addToNewsletterIfInNewsletterContactGroupMembership(ctx context.Context, contact *notificationmiloapiscomv1alpha1.Contact) bool {
 	log := logf.FromContext(ctx).WithValues("controller", "LoopsContactController", "trigger", contact.Name)
