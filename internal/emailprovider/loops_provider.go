@@ -245,6 +245,53 @@ func (l *LoopsEmail) UpdateContact(ctx context.Context, email, firstName, lastNa
 	return out, nil
 }
 
+// UpdateContactMailingLists updates ONLY the mailing lists for a contact identified by userId.
+// Other fields are left untouched. This is useful when you want to subscribe/unsubscribe from lists
+// without modifying core profile fields.
+func (l *LoopsEmail) UpdateContactMailingLists(ctx context.Context, userID string, mailingLists []LoopsMailingList) ([]LoopsContact, error) {
+	payload := loopsCreateOrUpdatePayload{
+		UserID:       userID,
+		MailingLists: mailingListsSliceToPayload(mailingLists),
+	}
+	httpResp, err := l.do(ctx, http.MethodPut, "/api/v1/contacts/update", payload)
+	if err != nil {
+		return nil, err
+	}
+	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
+		if httpResp.StatusCode == http.StatusConflict {
+			return nil, errors.NewConflict(
+				schema.GroupResource{Group: "loops", Resource: "contacts"},
+				preferredContactName("", userID),
+				fmt.Errorf("loops update (mailing lists) conflict: %s", string(httpResp.Body)),
+			)
+		}
+		if httpResp.StatusCode == http.StatusBadRequest {
+			return nil, errors.NewBadRequest(fmt.Sprintf("loops update (mailing lists) bad request: %s", string(httpResp.Body)))
+		}
+		return nil, fmt.Errorf("loops update (mailing lists) failed: status=%d body=%s", httpResp.StatusCode, string(httpResp.Body))
+	}
+	var out []LoopsContact
+	body := httpResp.Body
+	if len(body) == 0 {
+		return nil, fmt.Errorf("empty loops update (mailing lists) response")
+	}
+	switch body[0] {
+	case '[':
+		if err := json.Unmarshal(body, &out); err != nil {
+			return nil, fmt.Errorf("parse loops update (mailing lists) response (array): %w", err)
+		}
+	case '{':
+		var single LoopsContact
+		if err := json.Unmarshal(body, &single); err != nil {
+			return nil, fmt.Errorf("parse loops update (mailing lists) response (object): %w", err)
+		}
+		out = []LoopsContact{single}
+	default:
+		return nil, fmt.Errorf("unexpected loops update (mailing lists) response prefix: %q", string(body[:1]))
+	}
+	return out, nil
+}
+
 // DeleteContact deletes a Loops contact. It ALWAYS uses the provided userID parameter.
 // Email is also sent when available to match the sample payload.
 func (l *LoopsEmail) DeleteContact(ctx context.Context, userID string) (LoopsDeleteResponse, error) {

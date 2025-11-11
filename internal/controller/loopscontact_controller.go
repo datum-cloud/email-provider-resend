@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.miloapis.com/email-provider-resend/internal/emailprovider"
 	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
@@ -36,6 +37,17 @@ import (
 
 const (
 	loopsContactFinalizerKey = "notification.miloapis.com/loops-contact"
+)
+
+const (
+	// NewsLetterListId is the ID of the loops news letter list
+	newsLetterListId = "cmhtdlxpi0asc0i1l0q89fmzs"
+	// NewsLetterAddedCondition is a condition that is set to true when the mailing list is added to the Loops contact
+	NewsLetterAddedCondition = "NewsLetterAdded"
+	// NewsLetterAddedReason is a reason that is set when the mailing list is added to the Loops contact
+	NewsLetterAddedReason = "NewsLetterAdded"
+	// NewsLetterNotAddedReason is a reason that is set when the mailing list is not added to the Loops contact
+	NewsLetterNotAddedReason = "NewsLetterNotAdded"
 )
 
 const (
@@ -203,6 +215,11 @@ func (r *LoopsContactController) Reconcile(ctx context.Context, req ctrl.Request
 
 	}
 
+	errorAddingToNewsLetter := false
+	if r.isNewsletterContact(ctx, contact) {
+		errorAddingToNewsLetter = r.addToNewsLetterList(ctx, contact)
+	}
+
 	// Update contact status if it changed
 	if !equality.Semantic.DeepEqual(oldStatus, &contact.Status) {
 		if err := r.Client.Status().Patch(ctx, contact, client.MergeFrom(original), client.FieldOwner("loopscontact-controller")); err != nil {
@@ -211,6 +228,11 @@ func (r *LoopsContactController) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	} else {
 		log.Info("Contact status unchanged, skipping update")
+	}
+
+	if errorAddingToNewsLetter {
+		log.Error(errors.NewInternalError(fmt.Errorf("failed to add mailing list to Loops contact")), "Failed to add mailing list to Loops contact")
+		return ctrl.Result{}, fmt.Errorf("failed to add mailing list to Loops contact")
 	}
 
 	log.Info("Contact reconciled")
@@ -231,7 +253,7 @@ func (r *LoopsContactController) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&notificationmiloapiscomv1alpha1.Contact{}).
-		Named("contact").
+		Named("loopscontact").
 		Complete(r)
 }
 
@@ -304,4 +326,52 @@ func (f *loopsContactFinalizer) DeleteContact(ctx context.Context, contact *noti
 	}
 
 	return nil
+}
+
+func (r *LoopsContactController) addToNewsLetterList(ctx context.Context, contact *notificationmiloapiscomv1alpha1.Contact) bool {
+	log := logf.FromContext(ctx).WithValues("controller", "LoopsContactController", "trigger", contact.Name)
+	log.Info("Adding mailing list to Loops contact")
+
+	newsLetterCond := meta.FindStatusCondition(contact.Status.Conditions, NewsLetterAddedCondition)
+	if newsLetterCond != nil && newsLetterCond.Status == metav1.ConditionTrue {
+		log.Info("News letter already added")
+		return false
+	}
+
+	// Add mailing list to Loops contact
+	_, err := r.Loops.UpdateContactMailingLists(ctx, string(contact.UID), []emailprovider.LoopsMailingList{{ID: newsLetterListId, Subscribed: true}})
+	if err != nil {
+		log.Error(err, "Failed to add mailing list to Loops contact")
+
+		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
+			Type:               NewsLetterAddedCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             NewsLetterNotAddedReason,
+			Message:            fmt.Sprintf("Contact not added to Newsletter list: %s", err.Error()),
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: contact.GetGeneration(),
+		})
+
+		return true
+	}
+
+	meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
+		Type:               NewsLetterAddedCondition,
+		Status:             metav1.ConditionTrue,
+		Reason:             NewsLetterAddedReason,
+		Message:            "Contact added to Newsletter list as contact created from newsletter form",
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: contact.GetGeneration(),
+	})
+
+	return false
+}
+
+// isNewsletterContact returns true if the contact name starts with "newsletter-".
+func (r *LoopsContactController) isNewsletterContact(ctx context.Context, contact *notificationmiloapiscomv1alpha1.Contact) bool {
+	if strings.HasPrefix(contact.Name, "newsletter-") {
+		return true
+	}
+
+	return false
 }
