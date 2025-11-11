@@ -37,11 +37,10 @@ import (
 
 const (
 	loopsContactFinalizerKey = "notification.miloapis.com/loops-contact"
+	loopsContactIndexKey = "loopscontact-index"
 )
 
 const (
-	// NewsLetterListId is the ID of the loops news letter list
-	newsLetterListId = "cmhtdlxpi0asc0i1l0q89fmzs"
 	// NewsLetterAddedCondition is a condition that is set to true when the mailing list is added to the Loops contact
 	NewsLetterAddedCondition = "NewsLetterAdded"
 	// NewsLetterAddedReason is a reason that is set when the mailing list is added to the Loops contact
@@ -68,6 +67,8 @@ type LoopsContactController struct {
 	Client     client.Client
 	Finalizers finalizer.Finalizers
 	Loops      emailprovider.LoopsEmail
+	NewsLetterListId string
+	NewsletterContactGroupId string
 }
 
 // loopsContactFinalizer is a finalizer for the Contact object
@@ -216,8 +217,10 @@ func (r *LoopsContactController) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	errorAddingToNewsLetter := false
-	if r.isNewsletterContact(ctx, contact) {
+	if r.isNewsletterContact(contact) {
 		errorAddingToNewsLetter = r.addToNewsLetterList(ctx, contact)
+	} else {
+		errorAddingToNewsLetter = r.addToNewsletterIfInNewsletterContactGroupMembership(ctx, contact)
 	}
 
 	// Update contact status if it changed
@@ -249,6 +252,14 @@ func (r *LoopsContactController) SetupWithManager(mgr ctrl.Manager) error {
 		Loops:  r.Loops,
 	}); err != nil {
 		return fmt.Errorf("failed to register loops contact finalizer: %w", err)
+	}
+
+	// Index by contact group membership for efficient contact group membership lookup
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &notificationmiloapiscomv1alpha1.ContactGroupMembership{}, loopsContactIndexKey, func(rawObj client.Object) []string {
+		cgm := rawObj.(*notificationmiloapiscomv1alpha1.ContactGroupMembership)
+		return []string{buildContactNamespacedIndexKey(cgm.Spec.ContactRef.Name, cgm.Spec.ContactRef.Namespace)}
+	}); err != nil {
+		return fmt.Errorf("failed to index contactgroupmembership by contact name: %w", err)
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -339,7 +350,7 @@ func (r *LoopsContactController) addToNewsLetterList(ctx context.Context, contac
 	}
 
 	// Add mailing list to Loops contact
-	_, err := r.Loops.UpdateContactMailingLists(ctx, string(contact.UID), []emailprovider.LoopsMailingList{{ID: newsLetterListId, Subscribed: true}})
+	_, err := r.Loops.UpdateContactMailingLists(ctx, string(contact.UID), []emailprovider.LoopsMailingList{{ID: r.NewsLetterListId, Subscribed: true}})
 	if err != nil {
 		log.Error(err, "Failed to add mailing list to Loops contact")
 
@@ -368,9 +379,26 @@ func (r *LoopsContactController) addToNewsLetterList(ctx context.Context, contac
 }
 
 // isNewsletterContact returns true if the contact name starts with "newsletter-".
-func (r *LoopsContactController) isNewsletterContact(ctx context.Context, contact *notificationmiloapiscomv1alpha1.Contact) bool {
-	if strings.HasPrefix(contact.Name, "newsletter-") {
+func (r *LoopsContactController) isNewsletterContact(contact *notificationmiloapiscomv1alpha1.Contact) bool {
+	return strings.HasPrefix(contact.Name, "newsletter-") 
+}
+
+
+func (r *LoopsContactController) addToNewsletterIfInNewsletterContactGroupMembership(ctx context.Context, contact *notificationmiloapiscomv1alpha1.Contact) bool {
+	log := logf.FromContext(ctx).WithValues("controller", "LoopsContactController", "trigger", contact.Name)
+	log.Info("Checking if contact is in newsletter contact group membership")
+
+	contactGroupMembershipList := &notificationmiloapiscomv1alpha1.ContactGroupMembershipList{}
+	err := r.Client.List(ctx, contactGroupMembershipList, client.MatchingFields{loopsContactIndexKey: buildContactNamespacedIndexKey(contact.Name, contact.Namespace)})
+	if err != nil {
+		log.Error(err, "Failed to list contact group memberships")
 		return true
+	}
+
+	for _, contactGroupMembership := range contactGroupMembershipList.Items {
+		if contactGroupMembership.Spec.ContactGroupRef.Name == r.NewsletterContactGroupId {
+			return r.addToNewsLetterList(ctx, contact)
+		}
 	}
 
 	return false
