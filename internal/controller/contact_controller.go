@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.miloapis.com/email-provider-resend/internal/emailprovider"
 	notificationmiloapiscomv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -44,13 +45,15 @@ func buildContactNamespacedIndexKey(contactName, contactNamespace string) string
 
 // ContactReconciler reconciles a Contact object
 type ContactController struct {
-	Client     client.Client
-	Finalizers finalizer.Finalizers
+	Client        client.Client
+	Finalizers    finalizer.Finalizers
+	EmailProvider emailprovider.Service
 }
 
 // contactFinalizer is a finalizer for the Contact object
 type contactFinalizer struct {
-	Client client.Client
+	Client        client.Client
+	EmailProvider emailprovider.Service
 }
 
 func (f *contactFinalizer) Finalize(ctx context.Context, obj client.Object) (finalizer.Result, error) {
@@ -64,9 +67,20 @@ func (f *contactFinalizer) Finalize(ctx context.Context, obj client.Object) (fin
 		return finalizer.Result{}, fmt.Errorf("object is not a Contact")
 	}
 
+	// Delete Contact on email provider
+	deleted, err := f.EmailProvider.DeleteContact(ctx, *contact)
+	if err != nil && !errors.IsNotFound(err) {
+		log.Error(err, "Failed to delete Contact on email provider")
+		return finalizer.Result{}, fmt.Errorf("failed to delete Contact on email provider: %w", err)
+	}
+	if err == nil && !deleted.Deleted {
+		log.Error(fmt.Errorf("failed to delete Contact on email provider. Expected deleted to be true, got %t", deleted.Deleted), "Failed to delete Contact on email provider")
+		return finalizer.Result{}, fmt.Errorf("failed to delete Contact on email provider. Expected deleted to be true, got %t", deleted.Deleted)
+	}
+
 	// Get associated ContactGroupMemberships to contact name
 	contactGroupMemberships := &notificationmiloapiscomv1alpha1.ContactGroupMembershipList{}
-	err := f.Client.List(ctx, contactGroupMemberships, client.MatchingFields{contactNamespacedIndexKey: buildContactNamespacedIndexKey(contact.Name, contact.Namespace)})
+	err = f.Client.List(ctx, contactGroupMemberships, client.MatchingFields{contactNamespacedIndexKey: buildContactNamespacedIndexKey(contact.Name, contact.Namespace)})
 	if err != nil {
 		log.Error(err, "Failed to list ContactGroupMemberships")
 		return finalizer.Result{}, fmt.Errorf("failed to list ContactGroupMemberships: %w", err)
@@ -164,32 +178,59 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	switch {
 	// First creation – condition not present yet
 	case existingCond == nil:
+		// Create Contact on email provider
+		emailProviderContact, err := r.EmailProvider.CreateContactIdempotent(ctx, *contact)
+		if err != nil {
+			log.Error(err, "Failed to create Contact on email provider")
+			return ctrl.Result{}, fmt.Errorf("failed to create Contact on email provider: %w", err)
+		}
+		contact.Status.ProviderID = emailProviderContact.ContactId
+
 		log.Info("Contact first creation")
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             notificationmiloapiscomv1alpha1.ContactCreatePendingReason,
+			Message:            "Contact created. Waiting for email provider webhook confirmation",
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: contact.GetGeneration(),
+		})
+
+		// Set ContactUpdatedCondition to true to indicate that the contact is ready to accept incoming updates
+		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
+			Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
 			Status:             metav1.ConditionTrue,
 			Reason:             notificationmiloapiscomv1alpha1.ContactCreatedReason,
-			Message:            "Contact created",
+			Message:            "Contact created. Contact is ready to accept incoming updates",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contact.GetGeneration(),
 		})
 
 	// Update – generation changed since we last processed the object
-	case updatedCond == nil || updatedCond.ObservedGeneration != contact.GetGeneration():
+	case updatedCond != nil && updatedCond.ObservedGeneration != contact.GetGeneration():
 		log.Info("Contact updated")
+
+		// Update Contact on email provider
+		emailProviderContact, err := r.EmailProvider.UpdateContactIdempotent(ctx, *contact)
+		if err != nil {
+			log.Error(err, "Failed to update Contact on email provider")
+			return ctrl.Result{}, fmt.Errorf("failed to update Contact on email provider: %w", err)
+		}
+		contact.Status.ProviderID = emailProviderContact.ContactId
+
 		// Update condition
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
-			Status:             metav1.ConditionTrue,
-			Reason:             notificationmiloapiscomv1alpha1.ContactUpdatedReason,
-			Message:            "Contact updated",
+			Status:             metav1.ConditionFalse,
+			Reason:             notificationmiloapiscomv1alpha1.ContactUpdatePendingReason,
+			Message:            "Contact updated. Waiting for email provider webhook confirmation",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contact.GetGeneration(),
 		})
 
 		// Get associated ContactGroupMemberships to contact
 		contactGroupMemberships := &notificationmiloapiscomv1alpha1.ContactGroupMembershipList{}
-		err := r.Client.List(ctx, contactGroupMemberships, client.MatchingFields{contactNamespacedIndexKey: buildContactNamespacedIndexKey(contact.Name, contact.Namespace)})
+		err = r.Client.List(ctx, contactGroupMemberships, client.MatchingFields{contactNamespacedIndexKey: buildContactNamespacedIndexKey(contact.Name, contact.Namespace)})
 		if err != nil {
 			log.Error(err, "Failed to list ContactGroupMemberships")
 			return ctrl.Result{}, fmt.Errorf("failed to list ContactGroupMemberships: %w", err)
@@ -250,7 +291,9 @@ func (r *ContactController) SetupWithManager(mgr ctrl.Manager) error {
 	// Register finalizer
 	r.Finalizers = finalizer.NewFinalizers()
 	if err := r.Finalizers.Register(contactFinalizerKey, &contactFinalizer{
-		Client: r.Client}); err != nil {
+		Client:        r.Client,
+		EmailProvider: r.EmailProvider,
+	}); err != nil {
 		return fmt.Errorf("failed to register contact finalizer: %w", err)
 	}
 

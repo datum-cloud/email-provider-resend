@@ -106,59 +106,58 @@ func (s *Service) GetContactGroupByDisplayName(ctx context.Context, displayName 
 	return GetContactGroupOutput{}, errors.NewNotFound(schema.GroupResource{Group: "resend", Resource: "audiences"}, displayName)
 }
 
-// CreateContactGroupMembership creates a contact group membership on the email provider.
-func (s *Service) CreateContactGroupMembershipIdempotent(ctx context.Context, contactGroup notificationmiloapiscomv1alpha1.ContactGroup, contact notificationmiloapiscomv1alpha1.Contact) (CreateContactGroupMembershipOutput, error) {
-	existing, err := s.GetContactGroupMembershipByEmail(ctx, contactGroup, contact)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return s.CreateContactGroupMembership(ctx, contactGroup, contact)
-		}
-		return CreateContactGroupMembershipOutput{}, err
-	}
-
-	return CreateContactGroupMembershipOutput(existing), nil
-}
-
-// GetContactGroupMembershipByEmail returns the contact group membership by email.
-func (s *Service) GetContactGroupMembershipByEmail(ctx context.Context, contactGroup notificationmiloapiscomv1alpha1.ContactGroup, contact notificationmiloapiscomv1alpha1.Contact) (GetContactGroupMembershipByEmailOutput, error) {
-	return s.provider.GetContactGroupMembershipByEmail(ctx, GetContactGroupMembershipByEmailInput{
-		ContactGroupID: contactGroup.Status.ProviderID,
-		Email:          contact.Spec.Email,
-	})
-}
-
 // DeleteContactGroupMembership deletes a contact group membership on the email provider.
 // This is an idempotent operation.
-func (s *Service) DeleteContactGroupMembershipIdempotent(ctx context.Context, contactGroupMembership notificationmiloapiscomv1alpha1.ContactGroupMembership, contactGroup notificationmiloapiscomv1alpha1.ContactGroup) (DeleteContactGroupMembershipOutput, error) {
-	return s.provider.DeleteContactGroupMembership(ctx, DeleteContactGroupMembershipInput{
-		ContactGroupMembershipID: contactGroupMembership.Status.ProviderID,
-		ContactGroupId:           contactGroup.Status.ProviderID,
-	})
-}
-
-// CreateContactGroupMembership creates a contact group membership on the email provider.
-func (s *Service) CreateContactGroupMembership(ctx context.Context, contactGroup notificationmiloapiscomv1alpha1.ContactGroup, contact notificationmiloapiscomv1alpha1.Contact) (CreateContactGroupMembershipOutput, error) {
-	return s.provider.CreateContactGroupMembership(ctx, CreateContactGroupMembershipInput{
-		ContactGroupID: contactGroup.Status.ProviderID,
-		Email:          contact.Spec.Email,
-		GivenName:      contact.Spec.GivenName,
-		FamilyName:     contact.Spec.FamilyName,
-	})
-}
-
-// UpdateContactGroupMembership updates a contact on the email provider.
-// As Resend does not support updating the email address, we delete the existing contact group membership and create a new one.
-// This would save us some API calls.
-func (s *Service) UpdateContactGroupMembership(ctx context.Context,
-	contactGroupMembership notificationmiloapiscomv1alpha1.ContactGroupMembership,
+func (s *Service) DeleteContactGroupMembershipIdempotent(
+	ctx context.Context,
 	contactGroup notificationmiloapiscomv1alpha1.ContactGroup,
-	contact notificationmiloapiscomv1alpha1.Contact) (CreateContactGroupMembershipOutput, error) {
-	deleted, err := s.DeleteContactGroupMembershipIdempotent(ctx, contactGroupMembership, contactGroup)
+	contact notificationmiloapiscomv1alpha1.Contact) (DeleteContactGroupMembershipOutput, error) {
+	return s.provider.DeleteContactGroupMembership(ctx, DeleteContactGroupMembershipInput{
+		ContactId:      contact.Status.ProviderID,
+		ContactGroupId: contactGroup.Status.ProviderID,
+	})
+}
+
+// CreateContactGroupMembershipIdempotent creates a contact group membership on the email provider.
+// This is an idempotent operation.
+func (s *Service) CreateContactGroupMembershipIdempotent(ctx context.Context, contactGroup notificationmiloapiscomv1alpha1.ContactGroup, contact notificationmiloapiscomv1alpha1.Contact) (CreateContactGroupMembershipOutput, error) {
+	return s.provider.CreateContactGroupMembership(ctx, CreateContactGroupMembershipInput{
+		ContactGroupId: contactGroup.Status.ProviderID,
+		ContactId:      contact.Status.ProviderID,
+	})
+}
+
+// CreateContact creates a contact on the email provider.
+// This is an idempotent operation.
+func (s *Service) CreateContactIdempotent(ctx context.Context, contact notificationmiloapiscomv1alpha1.Contact) (CreateContactOutput, error) {
+	return s.provider.CreateContact(ctx, CreateContactInput{
+		Email:      contact.Spec.Email,
+		GivenName:  contact.Spec.GivenName,
+		FamilyName: contact.Spec.FamilyName,
+	})
+}
+
+// DeleteContact deletes a contact on the email provider.
+func (s *Service) DeleteContact(ctx context.Context, contact notificationmiloapiscomv1alpha1.Contact) (DeleteContactOutput, error) {
+	return s.provider.DeleteContact(ctx, DeleteContactInput{
+		ContactId: contact.Status.ProviderID,
+	})
+}
+
+// UpdateContactIdempotent updates a contact on the email provider.
+// It deletes the existing contact and creates a new one, as Resend does not support updating the email address.
+// This is an idempotent operation.
+func (s *Service) UpdateContactIdempotent(ctx context.Context, contact notificationmiloapiscomv1alpha1.Contact) (CreateContactOutput, error) {
+	deleted, err := s.DeleteContact(ctx, contact)
 	if err != nil {
-		return CreateContactGroupMembershipOutput{}, err
+		if !errors.IsNotFound(err) {
+			return CreateContactOutput{}, fmt.Errorf("failed to delete contact during update: %w", err)
+		}
+		return s.CreateContactIdempotent(ctx, contact)
 	}
+
 	if !deleted.Deleted {
-		return CreateContactGroupMembershipOutput{}, fmt.Errorf("failed to delete contact group membership during update")
+		return CreateContactOutput{}, fmt.Errorf("failed to delete contact during update")
 	}
-	return s.CreateContactGroupMembership(ctx, contactGroup, contact)
+	return s.CreateContactIdempotent(ctx, contact)
 }

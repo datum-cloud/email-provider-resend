@@ -304,7 +304,8 @@ func runManager(
 
 	// Setup contact controller
 	if err := (&controller.ContactController{
-		Client: mgr.GetClient(),
+		Client:        mgr.GetClient(),
+		EmailProvider: *emailProviderService,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Contact")
 		return fmt.Errorf("unable to create controller: %w", err)

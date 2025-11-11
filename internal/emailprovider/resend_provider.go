@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/resend/resend-go/v2"
+	"github.com/resend/resend-go/v3"
 	rtime "go.miloapis.com/email-provider-resend/internal/resend"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -55,7 +55,7 @@ func (r *ResendEmailProvider) CreateContactGroup(ctx context.Context, input Crea
 		ContactGroupID: "",
 	}
 
-	resp, err := r.client.Audiences.Create(&resend.CreateAudienceRequest{
+	resp, err := r.client.Segments.Create(&resend.CreateSegmentRequest{
 		Name: input.DisplayName,
 	})
 	if err != nil {
@@ -71,9 +71,9 @@ func (r *ResendEmailProvider) CreateContactGroup(ctx context.Context, input Crea
 func (r *ResendEmailProvider) GetContactGroup(ctx context.Context, input GetContactGroupInput) (GetContactGroupOutput, error) {
 	output := GetContactGroupOutput{}
 
-	resp, err := r.client.Audiences.Get(input.ContactGroupID)
+	resp, err := r.client.Segments.Get(input.ContactGroupID)
 	if err != nil {
-		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "audiences"}, input.ContactGroupID)
+		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "segments"}, input.ContactGroupID)
 	}
 
 	output.ContactGroupID = resp.Id
@@ -93,9 +93,9 @@ func (r *ResendEmailProvider) GetContactGroup(ctx context.Context, input GetCont
 func (r *ResendEmailProvider) DeleteContactGroup(ctx context.Context, input DeleteContactGroupInput) (DeleteContactGroupOutput, error) {
 	output := DeleteContactGroupOutput{}
 
-	resp, err := r.client.Audiences.Remove(input.ContactGroupID)
+	resp, err := r.client.Segments.Remove(input.ContactGroupID)
 	if err != nil {
-		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "audiences"}, input.ContactGroupID)
+		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "segments"}, input.ContactGroupID)
 	}
 
 	output.Deleted = resp.Deleted
@@ -108,15 +108,15 @@ func (r *ResendEmailProvider) DeleteContactGroup(ctx context.Context, input Dele
 func (r *ResendEmailProvider) ListContactGroups(ctx context.Context) (ListContactGroupsOutput, error) {
 	output := ListContactGroupsOutput{}
 
-	resp, err := r.client.Audiences.List()
+	resp, err := r.client.Segments.List()
 	if err != nil {
 		return output, fmt.Errorf("failed to list contact groups using resend: %w", err)
 	}
 
-	for _, audience := range resp.Data {
+	for _, segment := range resp.Data {
 		output.ContactGroups = append(output.ContactGroups, GetContactGroupOutput{
-			ContactGroupID: audience.Id,
-			DisplayName:    audience.Name,
+			ContactGroupID: segment.Id,
+			DisplayName:    segment.Name,
 		})
 	}
 
@@ -129,31 +129,12 @@ func (r *ResendEmailProvider) CreateContactGroupMembership(ctx context.Context, 
 		ContactGroupMembershipID: "",
 	}
 
-	resp, err := r.client.Contacts.Create(&resend.CreateContactRequest{
-		AudienceId:   input.ContactGroupID,
-		Email:        input.Email,
-		FirstName:    input.GivenName,
-		LastName:     input.FamilyName,
-		Unsubscribed: false,
+	resp, err := r.client.Contacts.Segments.Add(&resend.AddContactSegmentRequest{
+		ContactId: input.ContactId,
+		SegmentId: input.ContactGroupId,
 	})
 	if err != nil {
-		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "contacts"}, input.ContactGroupID)
-	}
-
-	output.ContactGroupMembershipID = resp.Id
-
-	return output, nil
-}
-
-// GetContactGroupMembershipByEmail satisfies the EmailProvider interface. It returns the resend contact group membership id of the contact group membership.
-func (r *ResendEmailProvider) GetContactGroupMembershipByEmail(ctx context.Context, input GetContactGroupMembershipByEmailInput) (GetContactGroupMembershipByEmailOutput, error) {
-	output := GetContactGroupMembershipByEmailOutput{
-		ContactGroupMembershipID: "",
-	}
-
-	resp, err := r.client.Contacts.Get(input.ContactGroupID, input.Email)
-	if err != nil {
-		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "contacts"}, input.Email)
+		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "contacts"}, input.ContactGroupId)
 	}
 
 	output.ContactGroupMembershipID = resp.Id
@@ -169,9 +150,46 @@ func (r *ResendEmailProvider) DeleteContactGroupMembership(ctx context.Context, 
 		Deleted:                  false,
 	}
 
-	resp, err := r.client.Contacts.Remove(input.ContactGroupId, input.ContactGroupMembershipID)
+	resp, err := r.client.Contacts.Segments.Remove(&resend.RemoveContactSegmentRequest{
+		ContactId: input.ContactId,
+		SegmentId: input.ContactGroupId,
+	})
 	if err != nil {
 		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "contacts"}, input.ContactGroupId)
+	}
+
+	output.Deleted = resp.Deleted
+	return output, nil
+}
+
+// CreateContact satisfies the EmailProvider interface. It returns the resend contact email of the contact.
+func (r *ResendEmailProvider) CreateContact(ctx context.Context, input CreateContactInput) (CreateContactOutput, error) {
+	output := CreateContactOutput{}
+
+	resp, err := r.client.Contacts.Create(&resend.CreateContactRequest{
+		Email:        input.Email,
+		FirstName:    input.GivenName,
+		LastName:     input.FamilyName,
+		Unsubscribed: false,
+	})
+	if err != nil {
+		return output, fmt.Errorf("failed to create contact using resend: %w", err)
+	}
+
+	output.ContactId = resp.Id
+
+	return output, nil
+}
+
+// DeleteContact satisfies the EmailProvider interface. It returns the resend contact id of the contact.
+func (r *ResendEmailProvider) DeleteContact(ctx context.Context, input DeleteContactInput) (DeleteContactOutput, error) {
+	output := DeleteContactOutput{}
+
+	resp, err := r.client.Contacts.Remove(&resend.RemoveContactOptions{
+		Id: input.ContactId,
+	})
+	if err != nil {
+		return output, TranslateResendError(err, schema.GroupResource{Group: "resend", Resource: "contacts"}, input.ContactId)
 	}
 
 	output.Deleted = resp.Deleted

@@ -14,6 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	finalizerpkg "sigs.k8s.io/controller-runtime/pkg/finalizer"
+
+	"go.miloapis.com/email-provider-resend/internal/emailprovider"
+	"go.miloapis.com/email-provider-resend/internal/emailprovider/mockprovider"
 )
 
 var _ = ginkgo.Describe("ContactController", func() {
@@ -22,6 +25,7 @@ var _ = ginkgo.Describe("ContactController", func() {
 		k8sClient  client.Client
 		controller *ContactController
 		contact    *notificationv1.Contact
+		prov       *mockprovider.MockEmailProvider
 	)
 
 	ginkgo.BeforeEach(func() {
@@ -56,7 +60,13 @@ var _ = ginkgo.Describe("ContactController", func() {
 			WithIndex(&notificationv1.ContactGroupMembership{}, contactNamespacedIndexKey, indexFn).
 			Build()
 
-		controller = &ContactController{Client: k8sClient}
+		prov = &mockprovider.MockEmailProvider{
+			CreateContactOutput: emailprovider.CreateContactOutput{ContactId: "c-123"},
+			DeleteContactOutput: emailprovider.DeleteContactOutput{Deleted: true},
+		}
+		svc := emailprovider.NewService(prov, "from", "reply")
+
+		controller = &ContactController{Client: k8sClient, EmailProvider: *svc}
 		controller.Finalizers = finalizerpkg.NewFinalizers()
 	})
 
@@ -70,8 +80,12 @@ var _ = ginkgo.Describe("ContactController", func() {
 
 			cond := meta.FindStatusCondition(fetched.Status.Conditions, notificationv1.ContactReadyCondition)
 			gomega.Expect(cond).NotTo(gomega.BeNil())
-			gomega.Expect(cond.Reason).To(gomega.Equal(notificationv1.ContactCreatedReason))
-			gomega.Expect(cond.Status).To(gomega.Equal(metav1.ConditionTrue))
+			gomega.Expect(cond.Reason).To(gomega.Equal(notificationv1.ContactCreatePendingReason))
+			gomega.Expect(cond.Status).To(gomega.Equal(metav1.ConditionFalse))
+
+			// provider call assertions
+			gomega.Expect(prov.CreateContactCallCount).To(gomega.Equal(1))
+			gomega.Expect(fetched.Status.ProviderID).To(gomega.Equal("c-123"))
 		})
 	})
 
@@ -100,6 +114,10 @@ var _ = ginkgo.Describe("ContactController", func() {
 			cond := meta.FindStatusCondition(fetched.Status.Conditions, notificationv1.ContactUpdatedCondition)
 			gomega.Expect(cond).NotTo(gomega.BeNil())
 			gomega.Expect(cond.ObservedGeneration).To(gomega.Equal(int64(2)))
+
+			// Provider should have been called to delete and recreate contact
+			gomega.Expect(prov.DeleteContactCallCount).To(gomega.Equal(1))
+			gomega.Expect(prov.CreateContactCallCount).To(gomega.Equal(2)) // initial plus recreate
 		})
 	})
 })
@@ -111,6 +129,7 @@ var _ = ginkgo.Describe("contactFinalizer", func() {
 		finalizer *contactFinalizer
 		contact   *notificationv1.Contact
 		cgm       *notificationv1.ContactGroupMembership
+		prov      *mockprovider.MockEmailProvider
 	)
 
 	ginkgo.BeforeEach(func() {
@@ -145,7 +164,10 @@ var _ = ginkgo.Describe("contactFinalizer", func() {
 				return []string{buildContactNamespacedIndexKey(c.Spec.ContactRef.Name, c.Spec.ContactRef.Namespace)}
 			}).
 			Build()
-		finalizer = &contactFinalizer{Client: k8sClient}
+
+		prov = &mockprovider.MockEmailProvider{DeleteContactOutput: emailprovider.DeleteContactOutput{Deleted: true}}
+		svc := emailprovider.NewService(prov, "from", "reply")
+		finalizer = &contactFinalizer{Client: k8sClient, EmailProvider: *svc}
 	})
 
 	ginkgo.It("deletes associated membership in same namespace", func() {
@@ -156,6 +178,8 @@ var _ = ginkgo.Describe("contactFinalizer", func() {
 		list := &notificationv1.ContactGroupMembershipList{}
 		gomega.Expect(k8sClient.List(ctx, list)).To(gomega.Succeed())
 		gomega.Expect(list.Items).To(gomega.BeEmpty())
+
+		gomega.Expect(prov.DeleteContactCallCount).To(gomega.Equal(1))
 	})
 
 	ginkgo.It("ignores memberships in other namespaces", func() {
@@ -176,7 +200,7 @@ var _ = ginkgo.Describe("contactFinalizer", func() {
 				return []string{buildContactNamespacedIndexKey(c.Spec.ContactRef.Name, c.Spec.ContactRef.Namespace)}
 			}).
 			Build()
-		finalizer = &contactFinalizer{Client: k8sClient}
+		finalizer = &contactFinalizer{Client: k8sClient, EmailProvider: *emailprovider.NewService(&mockprovider.MockEmailProvider{DeleteContactOutput: emailprovider.DeleteContactOutput{Deleted: true}}, "from", "reply")}
 
 		_, err := finalizer.Finalize(ctx, contact.DeepCopy())
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
