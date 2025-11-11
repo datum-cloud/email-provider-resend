@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/finalizer"
@@ -122,6 +123,7 @@ func (r *LoopsContactController) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	oldStatus := contact.Status.DeepCopy()
+	original := contact.DeepCopy()
 	readyCond := meta.FindStatusCondition(contact.Status.Conditions, LoopsContactReadyCondition)
 
 	switch {
@@ -170,21 +172,21 @@ func (r *LoopsContactController) Reconcile(ctx context.Context, req ctrl.Request
 		log.Info("Contact updated")
 
 		err := r.updateContact(ctx, contact)
-		if err != nil && !errors.IsConflict(err) {
-			log.Error(err, "Failed to update Loops contact")
-			return ctrl.Result{}, fmt.Errorf("failed to update Loops contact: %w", err)
-		}
-
-		if err != nil && errors.IsConflict(err) {
-			log.Info("Loops contact already exists")
-			meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
-				Type:               LoopsContactReadyCondition,
-				Status:             metav1.ConditionFalse,
-				Reason:             LoopsContactNotUpdatedReason,
-				Message:            fmt.Sprintf("Loops contact not updated on email provider: %s", err.Error()),
-				LastTransitionTime: metav1.Now(),
-				ObservedGeneration: contact.GetGeneration(),
-			})
+		if err != nil {
+			if errors.IsConflict(err) || errors.IsBadRequest(err) || errors.IsNotFound(err) {
+				log.Info("Failed to update contact on email provider", "error", err.Error())
+				meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
+					Type:               LoopsContactReadyCondition,
+					Status:             metav1.ConditionFalse,
+					Reason:             LoopsContactNotUpdatedReason,
+					Message:            fmt.Sprintf("Loops contact not updated on email provider: %s", err.Error()),
+					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: contact.GetGeneration(),
+				})
+			} else {
+				log.Error(err, "Failed to update Loops contact")
+				return ctrl.Result{}, fmt.Errorf("failed to update Loops contact: %w", err)
+			}
 		}
 
 		if err == nil {
@@ -202,7 +204,6 @@ func (r *LoopsContactController) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Update contact status if it changed
-	original := contact.DeepCopy()
 	if !equality.Semantic.DeepEqual(oldStatus, &contact.Status) {
 		if err := r.Client.Status().Patch(ctx, contact, client.MergeFrom(original), client.FieldOwner("loopscontact-controller")); err != nil {
 			log.Error(err, "Failed to patch contact status")
@@ -275,14 +276,17 @@ func (r *LoopsContactController) updateContact(ctx context.Context, contact *not
 
 	if len(existing) == 0 {
 		log.Info("Loops contact not found")
-		return fmt.Errorf("loops contact not found")
+		return errors.NewNotFound(
+			schema.GroupResource{Group: "loops", Resource: "contacts"},
+			string(contact.UID),
+		)
 	}
 
 	// Update Loops contact
 	_, err = r.Loops.UpdateContact(ctx, contact.Spec.Email, contact.Spec.GivenName, contact.Spec.FamilyName, string(contact.UID), nil)
 	if err != nil {
 		log.Error(err, "Failed to update Loops contact")
-		return fmt.Errorf("failed to update Loops contact: %w", err)
+		return err
 	}
 
 	return nil

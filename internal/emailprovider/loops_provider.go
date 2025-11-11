@@ -218,6 +218,9 @@ func (l *LoopsEmail) UpdateContact(ctx context.Context, email, firstName, lastNa
 				fmt.Errorf("loops update conflict: %s", string(httpResp.Body)),
 			)
 		}
+		if httpResp.StatusCode == http.StatusBadRequest {
+			return nil, errors.NewBadRequest(fmt.Sprintf("loops update bad request: %s", string(httpResp.Body)))
+		}
 		return nil, fmt.Errorf("loops update contact failed: status=%d body=%s", httpResp.StatusCode, string(httpResp.Body))
 	}
 	var out []LoopsContact
