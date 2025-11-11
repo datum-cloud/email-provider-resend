@@ -51,7 +51,7 @@ func createManagerCommand() *cobra.Command {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
-	var emailApiKey, emailFrom, emailReplyTo string
+	var emailApiKey, emailFrom, emailReplyTo, loopsApiKey string
 	var lowPriorityEmailWait, normalPriorityEmailWait, highPriorityEmailWait time.Duration
 	// Leader election configuration options
 	var leaderElectionID, leaderElectionNamespace, leaderElectionResourceLock string
@@ -70,7 +70,7 @@ func createManagerCommand() *cobra.Command {
 				probeAddr,
 				secureMetrics,
 				enableHTTP2,
-				emailApiKey, emailFrom, emailReplyTo,
+				emailApiKey, emailFrom, emailReplyTo, loopsApiKey,
 				lowPriorityEmailWait, normalPriorityEmailWait, highPriorityEmailWait,
 				leaderElectionID, leaderElectionNamespace, leaderElectionResourceLock,
 				leaseDuration, renewDeadline, retryPeriod)
@@ -104,6 +104,8 @@ func createManagerCommand() *cobra.Command {
 	cmd.Flags().StringVar(&emailFrom, "email-from-address", "", "*Required. The from address for the email provider.")
 	cmd.Flags().StringVar(&emailReplyTo, "email-reply-to-address", "",
 		"*Required. The reply to address for the email provider.")
+	loopsApiKey = os.Getenv("LOOPS_API_KEY") // *Required. The API key for the Loops email provider.
+
 
 	// Email controller config
 	cmd.Flags().DurationVar(&lowPriorityEmailWait, "wait-time-before-retry-low-priority-email", 30*time.Second,
@@ -148,7 +150,7 @@ func runManager(
 	probeAddr string,
 	secureMetrics bool,
 	enableHTTP2 bool,
-	emailApiKey, emailFrom, emailReplyTo string,
+	emailApiKey, emailFrom, emailReplyTo, loopsApiKey string,
 	lowPriorityEmailWait, normalPriorityEmailWait, highPriorityEmailWait time.Duration,
 	leaderElectionID, leaderElectionNamespace, leaderElectionResourceLock string,
 	leaseDuration, renewDeadline, retryPeriod time.Duration,
@@ -291,6 +293,11 @@ func runManager(
 	resendEmailProvider := emailprovider.NewResendEmailProvider(emailConfig.GetAPIKey())
 	emailProviderService := emailprovider.NewService(resendEmailProvider, emailConfig.GetFrom(), emailConfig.GetReplyTo())
 
+	if loopsApiKey == "" {
+		return fmt.Errorf("LOOPS_API_KEY is required")
+	}
+	loopsEmailProvider := emailprovider.NewLoopsEmail(loopsApiKey)
+
 	// Setup email controller
 	if err := (&controller.EmailController{
 		Client:        mgr.GetClient(),
@@ -301,6 +308,15 @@ func runManager(
 		return fmt.Errorf("unable to create controller: %w", err)
 	}
 	// +kubebuilder:scaffold:builder
+
+	// Setup loops contact controller
+	if err := (&controller.LoopsContactController{
+		Client:        mgr.GetClient(),
+		Loops:         *loopsEmailProvider,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LoopsContact")
+		return fmt.Errorf("unable to create controller: %w", err)
+	}
 
 	// Setup contact controller
 	if err := (&controller.ContactController{
