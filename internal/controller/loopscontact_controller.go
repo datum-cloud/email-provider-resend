@@ -217,7 +217,6 @@ func (r *LoopsContactController) Reconcile(ctx context.Context, req ctrl.Request
 				ObservedGeneration: contact.GetGeneration(),
 			})
 		}
-
 	}
 
 	errorAddingToNewsLetter := false

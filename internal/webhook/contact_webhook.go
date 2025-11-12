@@ -11,6 +11,8 @@ import (
 	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 
+	contactcontroller "go.miloapis.com/email-provider-resend/internal/controller"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -44,9 +46,9 @@ func NewResendContactWebhookV1(k8sClient client.Client) *Webhook {
 			switch contactEvent.Envelope.Type {
 			case resend.ContactCreated:
 				condition = metav1.Condition{
-					Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
+					Type:               contactcontroller.ResendContactReadyCondition,
 					Status:             metav1.ConditionTrue,
-					Reason:             notificationmiloapiscomv1alpha1.ContactCreatedReason,
+					Reason:             contactcontroller.ResendContactCreatedReason,
 					Message:            "Contact creation confirmed by email provider webhook",
 					LastTransitionTime: metav1.Now(),
 					ObservedGeneration: contact.GetGeneration(),

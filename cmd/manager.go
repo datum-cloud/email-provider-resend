@@ -106,7 +106,6 @@ func createManagerCommand() *cobra.Command {
 		"*Required. The reply to address for the email provider.")
 	loopsApiKey = os.Getenv("LOOPS_API_KEY") // *Required. The API key for the Loops email provider.
 
-
 	// Email controller config
 	cmd.Flags().DurationVar(&lowPriorityEmailWait, "wait-time-before-retry-low-priority-email", 30*time.Second,
 		"*Not required. The wait time before retrying a low priority email.")
@@ -293,6 +292,16 @@ func runManager(
 	resendEmailProvider := emailprovider.NewResendEmailProvider(emailConfig.GetAPIKey())
 	emailProviderService := emailprovider.NewService(resendEmailProvider, emailConfig.GetFrom(), emailConfig.GetReplyTo())
 
+	newsLetterListId := os.Getenv("LOOPS_NEWSLETTER_LIST_ID")
+	newsletterContactGroupId := os.Getenv("MILO_NEWSLETTER_CONTACT_GROUP_ID")
+
+	if newsLetterListId == "" {
+		return fmt.Errorf("LOOPS_NEWSLETTER_LIST_ID is required")
+	}
+	if newsletterContactGroupId == "" {
+		return fmt.Errorf("MILO_NEWSLETTER_CONTACT_GROUP_ID is required")
+	}
+
 	if loopsApiKey == "" {
 		return fmt.Errorf("LOOPS_API_KEY is required")
 	}
@@ -308,15 +317,6 @@ func runManager(
 		return fmt.Errorf("unable to create controller: %w", err)
 	}
 	// +kubebuilder:scaffold:builder
-
-	// Setup loops contact controller
-	if err := (&controller.LoopsContactController{
-		Client:        mgr.GetClient(),
-		Loops:         *loopsEmailProvider,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "LoopsContact")
-		return fmt.Errorf("unable to create controller: %w", err)
-	}
 
 	// Setup contact controller
 	if err := (&controller.ContactController{
@@ -350,6 +350,17 @@ func runManager(
 		Client: mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ContactGroupMembershipRemoval")
+		return fmt.Errorf("unable to create controller: %w", err)
+	}
+
+	// Setup Loops contact controller
+	if err := (&controller.LoopsContactController{
+		Client:                   mgr.GetClient(),
+		Loops:                    *loopsEmailProvider,
+		NewsLetterListId:         newsLetterListId,
+		NewsletterContactGroupId: newsletterContactGroupId,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LoopsContact")
 		return fmt.Errorf("unable to create controller: %w", err)
 	}
 
