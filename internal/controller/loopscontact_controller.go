@@ -145,7 +145,7 @@ func (r *LoopsContactController) Reconcile(ctx context.Context, req ctrl.Request
 
 	switch {
 	// First creation – condition not present yet
-	case readyCond == nil:
+	case readyCond == nil || readyCond.Reason == LoopsContactNotCreatedReason:
 		log.Info("LoopsContact creation")
 
 		created, err := r.createContact(ctx, contact)
