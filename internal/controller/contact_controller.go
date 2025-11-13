@@ -38,6 +38,15 @@ const (
 	contactNamespacedIndexKey = "contact-namespaced-index"
 )
 
+const (
+	// ResendContactReadyCondition is a condition that is set to true when the contact is ready
+	ResendContactReadyCondition = "ResendContactReady"
+	// ResendContactCreatedReason is a reason that is set when the contact is created
+	ResendContactCreatedReason = "ResendContactCreated"
+	// ResendContactPendingReason is a reason that is set when the contact is pending
+	ResendContactPendingReason = "ResendContactPending"
+)
+
 // buildContactNamespacedIndexKey returns "<contact-ns>|<contact-name>"
 func buildContactNamespacedIndexKey(contactName, contactNamespace string) string {
 	return fmt.Sprintf("%s|%s", contactNamespace, contactName)
@@ -136,7 +145,7 @@ func (f *contactFinalizer) Finalize(ctx context.Context, obj client.Object) (fin
 }
 
 // +kubebuilder:rbac:groups=notification.miloapis.com,resources=contacts,verbs=get;list;watch
-// +kubebuilder:rbac:groups=notification.miloapis.com,resources=contacts/status,verbs=get;update
+// +kubebuilder:rbac:groups=notification.miloapis.com,resources=contacts/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=notification.miloapis.com,resources=contacts/finalizers,verbs=update
 // +kubebuilder:rbac:groups=notification.miloapis.com,resources=contactgroupmemberships,verbs=get;list;watch;delete
 
@@ -165,6 +174,10 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if finalizeResult.Updated {
 		log.Info("finalizer updated the contact object, updating API server")
 		if updateErr := r.Client.Update(ctx, contact); updateErr != nil {
+			if errors.IsConflict(updateErr) {
+				log.Info("Conflict updating Loopos Contact after finalizer update; requeuing")
+				return ctrl.Result{Requeue: true}, nil
+			}
 			log.Error(updateErr, "Failed to update Contact after finalizer update")
 			return ctrl.Result{}, updateErr
 		}
@@ -172,6 +185,7 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	oldStatus := contact.Status.DeepCopy()
+	original := contact.DeepCopy()
 	existingCond := meta.FindStatusCondition(contact.Status.Conditions, notificationmiloapiscomv1alpha1.ContactReadyCondition)
 	updatedCond := meta.FindStatusCondition(contact.Status.Conditions, notificationmiloapiscomv1alpha1.ContactUpdatedCondition)
 
@@ -188,9 +202,9 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 		log.Info("Contact first creation")
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
-			Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
+			Type:               ResendContactReadyCondition,
 			Status:             metav1.ConditionFalse,
-			Reason:             notificationmiloapiscomv1alpha1.ContactCreatePendingReason,
+			Reason:             ResendContactPendingReason,
 			Message:            "Contact created. Waiting for email provider webhook confirmation",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contact.GetGeneration(),
@@ -255,11 +269,17 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	r.verifyContactReadyCondition(contact)
+
 	// Update contact status if it changed
 	if !equality.Semantic.DeepEqual(oldStatus, &contact.Status) {
-		if err := r.Client.Status().Update(ctx, contact); err != nil {
-			log.Error(err, "Failed to update contact status")
-			return ctrl.Result{}, fmt.Errorf("failed to update contact status: %w", err)
+		if err := r.Client.Status().Patch(ctx, contact, client.MergeFrom(original), client.FieldOwner("contact-controller")); err != nil {
+			if errors.IsConflict(err) {
+				log.Info("Conflict patching contact status; requeuing")
+				return ctrl.Result{Requeue: true}, nil
+			}
+			log.Error(err, "Failed to patch contact status")
+			return ctrl.Result{}, fmt.Errorf("failed to patch contact status: %w", err)
 		}
 	} else {
 		log.Info("Contact status unchanged, skipping update")
@@ -301,4 +321,54 @@ func (r *ContactController) SetupWithManager(mgr ctrl.Manager) error {
 		For(&notificationmiloapiscomv1alpha1.Contact{}).
 		Named("contact").
 		Complete(r)
+}
+
+// verifyContactReadyCondition is a function that verifies the ContactReadyCondition
+func (r *ContactController) verifyContactReadyCondition(contact *notificationmiloapiscomv1alpha1.Contact) {
+	// Update contact status if it changed
+	// Aggregate readiness across providers: Loops and Resend
+	loopsCond := meta.FindStatusCondition(contact.Status.Conditions, LoopsContactReadyCondition)
+	resendCond := meta.FindStatusCondition(contact.Status.Conditions, ResendContactReadyCondition)
+	allReady := loopsCond != nil && loopsCond.Status == metav1.ConditionTrue &&
+		resendCond != nil && resendCond.Status == metav1.ConditionTrue
+
+	// TODO: Remove this after migration
+	// Condition for migration from old condition to new condition
+	readyCond := meta.FindStatusCondition(contact.Status.Conditions, notificationmiloapiscomv1alpha1.ContactReadyCondition)
+	if resendCond == nil && readyCond != nil && readyCond.Status == metav1.ConditionTrue &&
+		loopsCond != nil && loopsCond.Status == metav1.ConditionTrue {
+		allReady = true
+	}
+
+	if allReady {
+		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
+			Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
+			Status:             metav1.ConditionTrue,
+			Reason:             "AllProvidersReady",
+			Message:            "Loops and Resend contacts are ready",
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: contact.GetGeneration(),
+		})
+	} else {
+		// Build informative not-ready message
+		notReadyMsg := ""
+		if loopsCond == nil {
+			notReadyMsg += "Loops: condition missing; "
+		} else if loopsCond.Status != metav1.ConditionTrue {
+			notReadyMsg += fmt.Sprintf("Loops: %s (%s); ", loopsCond.Reason, loopsCond.Message)
+		}
+		if resendCond == nil {
+			notReadyMsg += "Resend: condition missing; "
+		} else if resendCond.Status != metav1.ConditionTrue {
+			notReadyMsg += fmt.Sprintf("Resend: %s (%s); ", resendCond.Reason, resendCond.Message)
+		}
+		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
+			Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             "ProvidersNotReady",
+			Message:            notReadyMsg,
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: contact.GetGeneration(),
+		})
+	}
 }

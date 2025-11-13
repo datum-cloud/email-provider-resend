@@ -11,6 +11,8 @@ import (
 	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 
+	contactcontroller "go.miloapis.com/email-provider-resend/internal/controller"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -43,13 +45,25 @@ func NewResendContactWebhookV1(k8sClient client.Client) *Webhook {
 			condition := metav1.Condition{}
 			switch contactEvent.Envelope.Type {
 			case resend.ContactCreated:
-				condition = metav1.Condition{
-					Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
-					Status:             metav1.ConditionTrue,
-					Reason:             notificationmiloapiscomv1alpha1.ContactCreatedReason,
-					Message:            "Contact creation confirmed by email provider webhook",
-					LastTransitionTime: metav1.Now(),
-					ObservedGeneration: contact.GetGeneration(),
+				if updatedCond != nil && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactUpdatePendingReason {
+					// Confirm previously pending update instead of marking deleted.
+					condition = metav1.Condition{
+						Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
+						Status:             metav1.ConditionTrue,
+						Reason:             notificationmiloapiscomv1alpha1.ContactUpdatedReason,
+						Message:            "Contact update confirmed by email provider webhook",
+						LastTransitionTime: metav1.Now(),
+						ObservedGeneration: contact.GetGeneration(),
+					}
+				} else {
+					condition = metav1.Condition{
+						Type:               contactcontroller.ResendContactReadyCondition,
+						Status:             metav1.ConditionTrue,
+						Reason:             contactcontroller.ResendContactCreatedReason,
+						Message:            "Contact creation confirmed by email provider webhook",
+						LastTransitionTime: metav1.Now(),
+						ObservedGeneration: contact.GetGeneration(),
+					}
 				}
 			case resend.ContactUpdated:
 				if updatedCond != nil && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactUpdatePendingReason {
