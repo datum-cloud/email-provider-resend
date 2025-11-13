@@ -324,6 +324,14 @@ func (r *ContactController) verifyContactReadyCondition(contact *notificationmil
 	allReady := loopsCond != nil && loopsCond.Status == metav1.ConditionTrue &&
 		resendCond != nil && resendCond.Status == metav1.ConditionTrue
 
+	// TODO: Remove this after migration
+	// Condition for migration from old condition to new condition
+	readyCond := meta.FindStatusCondition(contact.Status.Conditions, notificationmiloapiscomv1alpha1.ContactReadyCondition)
+	if resendCond == nil && readyCond != nil && readyCond.Status == metav1.ConditionTrue &&
+		loopsCond != nil && loopsCond.Status == metav1.ConditionTrue {
+		allReady = true
+	}
+
 	if allReady {
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,
@@ -345,6 +353,9 @@ func (r *ContactController) verifyContactReadyCondition(contact *notificationmil
 			notReadyMsg += "Resend: condition missing; "
 		} else if resendCond.Status != metav1.ConditionTrue {
 			notReadyMsg += fmt.Sprintf("Resend: %s (%s); ", resendCond.Reason, resendCond.Message)
+		}
+		if readyCond != nil && readyCond.Status != metav1.ConditionTrue {
+			notReadyMsg += fmt.Sprintf("Old: %s (%s); ", readyCond.Reason, readyCond.Message)
 		}
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
 			Type:               notificationmiloapiscomv1alpha1.ContactReadyCondition,

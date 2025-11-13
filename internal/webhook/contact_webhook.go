@@ -45,13 +45,25 @@ func NewResendContactWebhookV1(k8sClient client.Client) *Webhook {
 			condition := metav1.Condition{}
 			switch contactEvent.Envelope.Type {
 			case resend.ContactCreated:
-				condition = metav1.Condition{
-					Type:               contactcontroller.ResendContactReadyCondition,
-					Status:             metav1.ConditionTrue,
-					Reason:             contactcontroller.ResendContactCreatedReason,
-					Message:            "Contact creation confirmed by email provider webhook",
-					LastTransitionTime: metav1.Now(),
-					ObservedGeneration: contact.GetGeneration(),
+				if updatedCond != nil && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactUpdatePendingReason {
+					// Confirm previously pending update instead of marking deleted.
+					condition = metav1.Condition{
+						Type:               notificationmiloapiscomv1alpha1.ContactUpdatedCondition,
+						Status:             metav1.ConditionTrue,
+						Reason:             notificationmiloapiscomv1alpha1.ContactUpdatedReason,
+						Message:            "Contact update confirmed by email provider webhook",
+						LastTransitionTime: metav1.Now(),
+						ObservedGeneration: contact.GetGeneration(),
+					}
+				} else {
+					condition = metav1.Condition{
+						Type:               contactcontroller.ResendContactReadyCondition,
+						Status:             metav1.ConditionTrue,
+						Reason:             contactcontroller.ResendContactCreatedReason,
+						Message:            "Contact creation confirmed by email provider webhook",
+						LastTransitionTime: metav1.Now(),
+						ObservedGeneration: contact.GetGeneration(),
+					}
 				}
 			case resend.ContactUpdated:
 				if updatedCond != nil && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactUpdatePendingReason {
