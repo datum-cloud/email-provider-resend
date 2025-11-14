@@ -140,6 +140,10 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 			fetched := &notificationmiloapiscomv1alpha1.Email{}
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}, fetched)).To(gomega.Succeed())
 			gomega.Expect(fetched.Status.ProviderID).To(gomega.Equal("delivery-123"))
+			gomega.Expect(fetched.Status.Subject).To(gomega.Equal("Welcome"))
+			gomega.Expect(fetched.Status.HTMLBody).To(gomega.Equal(""))
+			gomega.Expect(fetched.Status.TextBody).To(gomega.Equal(""))
+			gomega.Expect(fetched.Status.EmailAddress).To(gomega.Equal("recipient@example.com"))
 		})
 	})
 
@@ -210,6 +214,10 @@ var _ = ginko.Describe("EmailController.Reconcile", func() {
 			fetched := &notificationmiloapiscomv1alpha1.Email{}
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: emailObj.Name, Namespace: emailObj.Namespace}, fetched)).To(gomega.Succeed())
 			gomega.Expect(fetched.Status.ProviderID).To(gomega.Equal("delivery-123"))
+			gomega.Expect(fetched.Status.Subject).To(gomega.Equal("Welcome"))
+			gomega.Expect(fetched.Status.HTMLBody).To(gomega.Equal(""))
+			gomega.Expect(fetched.Status.TextBody).To(gomega.Equal(""))
+			gomega.Expect(fetched.Status.EmailAddress).To(gomega.Equal("recipient@example.com"))
 		})
 	})
 })

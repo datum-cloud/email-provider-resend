@@ -87,6 +87,15 @@ func (r *EmailController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		output, err := r.EmailProvider.Send(ctx, email.DeepCopy(), emailTemplate.DeepCopy(), recipientEmailAddress)
 		if err != nil {
 			log.Error(err, "Failed to send email", "email", email.Name)
+			if err := r.updateEmailStatus(ctx, email, metav1.Condition{
+				Type:               notificationmiloapiscomv1alpha1.EmailDeliveredCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             notificationmiloapiscomv1alpha1.EmailDeliveryFailedReason,
+				Message:            fmt.Sprintf("Email delivery failed: %s", err.Error()),
+				LastTransitionTime: metav1.Now(),
+			}); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to update Email status: %w", err)
+			}
 			return ctrl.Result{RequeueAfter: r.Config.GetWaitTimeBeforeRetry(email.Spec.Priority)}, nil
 		}
 		log.Info("Email sent", "email", email.Name, "deliveryID", output.DeliveryID)
@@ -96,6 +105,10 @@ func (r *EmailController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		// updates (Delivered / Failed) are not overwritten by subsequent
 		// reconciliations.
 		email.Status.ProviderID = output.DeliveryID
+		email.Status.HTMLBody = output.HTMLBody
+		email.Status.TextBody = output.TextBody
+		email.Status.Subject = output.Subject
+		email.Status.EmailAddress = output.RecipientEmailAddress
 
 		// EmailProvider.Send (resend implementation) uses an idempotency mechanism using the Email.Name as idempotency key.
 		// In case of a failure updating the status, the email won't be sent again, and the return value from EmailProvider.Send
