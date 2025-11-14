@@ -186,12 +186,12 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	oldStatus := contact.Status.DeepCopy()
 	original := contact.DeepCopy()
-	existingCond := meta.FindStatusCondition(contact.Status.Conditions, notificationmiloapiscomv1alpha1.ContactReadyCondition)
+	resendReadyCond := meta.FindStatusCondition(contact.Status.Conditions, ResendContactReadyCondition)
 	updatedCond := meta.FindStatusCondition(contact.Status.Conditions, notificationmiloapiscomv1alpha1.ContactUpdatedCondition)
 
 	switch {
 	// First creation – condition not present yet
-	case existingCond == nil:
+	case resendReadyCond == nil:
 		// Create Contact on email provider
 		emailProviderContact, err := r.EmailProvider.CreateContactIdempotent(ctx, *contact)
 		if err != nil {
@@ -203,9 +203,9 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		log.Info("Contact first creation")
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
 			Type:               ResendContactReadyCondition,
-			Status:             metav1.ConditionFalse,
+			Status:             metav1.ConditionTrue,
 			Reason:             ResendContactPendingReason,
-			Message:            "Contact created. Waiting for email provider webhook confirmation",
+			Message:            "Contact created on email provider.",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contact.GetGeneration(),
 		})
@@ -331,14 +331,6 @@ func (r *ContactController) verifyContactReadyCondition(contact *notificationmil
 	resendCond := meta.FindStatusCondition(contact.Status.Conditions, ResendContactReadyCondition)
 	allReady := loopsCond != nil && loopsCond.Status == metav1.ConditionTrue &&
 		resendCond != nil && resendCond.Status == metav1.ConditionTrue
-
-	// TODO: Remove this after migration
-	// Condition for migration from old condition to new condition
-	readyCond := meta.FindStatusCondition(contact.Status.Conditions, notificationmiloapiscomv1alpha1.ContactReadyCondition)
-	if resendCond == nil && readyCond != nil && readyCond.Status == metav1.ConditionTrue &&
-		loopsCond != nil && loopsCond.Status == metav1.ConditionTrue {
-		allReady = true
-	}
 
 	if allReady {
 		meta.SetStatusCondition(&contact.Status.Conditions, metav1.Condition{
