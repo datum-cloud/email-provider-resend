@@ -26,37 +26,50 @@ func NewService(provider EmailProvider, from, replyTo string) *Service {
 	}
 }
 
+// SendEmailRenderedOutput is the output of the SendEmail function.
+// It contains the delivery ID, the HTML body, the text body, the subject and the recipient email address.
+type SendEmailRenderedOutput struct {
+	DeliveryID            string `json:"deliveryID"`
+	HTMLBody              string `json:"htmlBody"`
+	TextBody              string `json:"textBody,omitempty"`
+	Subject               string `json:"subject,omitempty"`
+	RecipientEmailAddress string `json:"recipientEmailAddress,omitempty"`
+}
+
 // Send takes the CRD objects coming from Milo, renders the templates and finally
 // hands the result to the configured Provider.
 func (s *Service) Send(ctx context.Context,
 	email *notificationmiloapiscomv1alpha1.Email,
 	template *notificationmiloapiscomv1alpha1.EmailTemplate,
 	recipientEmailAddress string,
-) (SendEmailOutput, error) {
+) (SendEmailRenderedOutput, error) {
 	// variables are already validated by Milo webhooks
 	// to match the referenced template
 	vars := email.Spec.Variables
 
-	output := SendEmailOutput{
-		DeliveryID: "",
+	output := SendEmailRenderedOutput{
+		RecipientEmailAddress: recipientEmailAddress,
 	}
 
 	htmlBody, err := emailtemplating.RenderHTMLBodyTemplate(vars, template)
 	if err != nil {
 		return output, fmt.Errorf("render HTML body: %w", err)
 	}
+	output.HTMLBody = htmlBody
 
 	textBody, err := emailtemplating.RenderTextBodyTemplate(vars, template)
 	if err != nil {
 		return output, fmt.Errorf("render text body: %w", err)
 	}
+	output.TextBody = textBody
 
 	subject, err := emailtemplating.RenderSubjectTemplate(vars, template)
 	if err != nil {
 		return output, fmt.Errorf("render subject: %w", err)
 	}
+	output.Subject = subject
 
-	return s.provider.SendEmail(ctx, SendEmailInput{
+	providerOutput, err := s.provider.SendEmail(ctx, SendEmailInput{
 		From:           s.from,
 		ReplyTo:        s.replyTo,
 		To:             []string{recipientEmailAddress},
@@ -67,6 +80,12 @@ func (s *Service) Send(ctx context.Context,
 		TextBody:       textBody,
 		IdempotencyKey: string(email.UID),
 	})
+	if err != nil {
+		return output, fmt.Errorf("error sending email: %w", err)
+	}
+	output.DeliveryID = providerOutput.DeliveryID
+
+	return output, nil
 }
 
 // CreateContactGroup creates a contact group on the email provider.

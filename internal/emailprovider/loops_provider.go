@@ -146,7 +146,7 @@ func (l *LoopsEmail) do(ctx context.Context, method, path string, body any) (Loo
 	if err != nil {
 		return LoopsHTTPResponse{}, fmt.Errorf("do request: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	respBytes, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -343,7 +343,7 @@ func (l *LoopsEmail) FindContactByUserID(ctx context.Context, userID string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	respBytes, err := io.ReadAll(res.Body)
 	if err != nil {
