@@ -89,7 +89,7 @@ var _ = ginkgo.Describe("ContactGroupMembershipController", func() {
 	})
 
 	ginkgo.Context("Reconcile", func() {
-		ginkgo.It("creates membership on provider and sets condition", func() {
+		ginkgo.It("creates membership on provider and sets Resend-specific condition", func() {
 			_, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: membership.Name, Namespace: membership.Namespace}})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -97,9 +97,10 @@ var _ = ginkgo.Describe("ContactGroupMembershipController", func() {
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: membership.Name, Namespace: membership.Namespace}, fetched)).To(gomega.Succeed())
 
 			gomega.Expect(fetched.Status.ProviderID).To(gomega.Equal("cgm-1"))
-			cond := meta.FindStatusCondition(fetched.Status.Conditions, notificationv1.ContactGroupMembershipReadyCondition)
-			gomega.Expect(cond).NotTo(gomega.BeNil())
-			gomega.Expect(cond.Reason).To(gomega.Equal(notificationv1.ContactGroupMembershipCreatedReason))
+			// Check Resend-specific condition (this controller only manages Resend)
+			resendCond := meta.FindStatusCondition(fetched.Status.Conditions, ResendContactGroupMembershipReadyCondition)
+			gomega.Expect(resendCond).NotTo(gomega.BeNil())
+			gomega.Expect(resendCond.Reason).To(gomega.Equal(notificationv1.ContactGroupMembershipCreatedReason))
 
 		})
 	})
