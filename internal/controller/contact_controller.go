@@ -47,6 +47,10 @@ const (
 	ResendContactPendingReason = "ResendContactPending"
 )
 
+const (
+	LoopsContactReadyCondition = "LoopsContactReady"
+)
+
 // buildContactNamespacedIndexKey returns "<contact-ns>|<contact-name>"
 func buildContactNamespacedIndexKey(contactName, contactNamespace string) string {
 	return fmt.Sprintf("%s|%s", contactNamespace, contactName)
@@ -205,7 +209,7 @@ func (r *ContactController) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			Type:               ResendContactReadyCondition,
 			Status:             metav1.ConditionTrue,
 			Reason:             ResendContactPendingReason,
-			Message:            "Contact created on email provider.",
+			Message:            "Contact created on email provider. Waiting for webhook confirmation.",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contact.GetGeneration(),
 		})

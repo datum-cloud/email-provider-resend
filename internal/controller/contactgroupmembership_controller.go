@@ -43,6 +43,11 @@ const (
 	cgmByContactNamespacedNameIndexKey = "cgm-by-contact-namespaced-name-index"
 )
 
+const (
+	ResendContactGroupMembershipReadyCondition = "ResendContactGroupMembershipReady"
+	LoopsContactGroupMembershipReadyCondition  = "LoopsContactGroupMembershipReady"
+)
+
 // ContactGroupMembershipReconciler reconciles a ContactGroupMembership object
 type ContactGroupMembershipController struct {
 	Client        client.Client
@@ -172,7 +177,7 @@ func (r *ContactGroupMembershipController) Reconcile(ctx context.Context, req ct
 		}
 		contactGroupMembership.Status.ProviderID = emailProviderContactGroupMembership.ContactGroupMembershipID
 		meta.SetStatusCondition(&contactGroupMembership.Status.Conditions, metav1.Condition{
-			Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipReadyCondition,
+			Type:               ResendContactGroupMembershipReadyCondition,
 			Status:             metav1.ConditionTrue,
 			Reason:             notificationmiloapiscomv1alpha1.ContactGroupMembershipCreatedReason,
 			Message:            "ContactGroupMembership created and synced with email provider",
@@ -203,6 +208,8 @@ func (r *ContactGroupMembershipController) Reconcile(ctx context.Context, req ct
 			ObservedGeneration: contactGroupMembership.GetGeneration(),
 		})
 	}
+
+	r.verifyContactGroupMembershipReadyCondition(contactGroupMembership)
 
 	// Update status if it changed
 	if !equality.Semantic.DeepEqual(oldStatus, &contactGroupMembership.Status) {
@@ -283,4 +290,46 @@ func (r *ContactGroupMembershipController) enqueueContactForContactGroupMembersh
 	}
 
 	return reqs
+}
+
+// verifyContactReadyCondition is a function that verifies the ContactReadyCondition
+func (r *ContactGroupMembershipController) verifyContactGroupMembershipReadyCondition(cgm *notificationmiloapiscomv1alpha1.ContactGroupMembership) {
+	// Update contact status if it changed
+	// Aggregate readiness across providers: Loops and Resend
+	loopsCond := meta.FindStatusCondition(cgm.Status.Conditions, LoopsContactGroupMembershipReadyCondition)
+	resendCond := meta.FindStatusCondition(cgm.Status.Conditions, ResendContactGroupMembershipReadyCondition)
+	allReady := loopsCond != nil && loopsCond.Status == metav1.ConditionTrue &&
+		resendCond != nil && resendCond.Status == metav1.ConditionTrue
+
+	if allReady {
+		meta.SetStatusCondition(&cgm.Status.Conditions, metav1.Condition{
+			Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipReadyCondition,
+			Status:             metav1.ConditionTrue,
+			Reason:             "AllProvidersReady",
+			Message:            "Loops and Resend contact group membership are ready",
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: cgm.GetGeneration(),
+		})
+	} else {
+		// Build informative not-ready message
+		notReadyMsg := ""
+		if loopsCond == nil {
+			notReadyMsg += "Loops: condition missing; "
+		} else if loopsCond.Status != metav1.ConditionTrue {
+			notReadyMsg += fmt.Sprintf("Loops: %s (%s); ", loopsCond.Reason, loopsCond.Message)
+		}
+		if resendCond == nil {
+			notReadyMsg += "Resend: condition missing; "
+		} else if resendCond.Status != metav1.ConditionTrue {
+			notReadyMsg += fmt.Sprintf("Resend: %s (%s); ", resendCond.Reason, resendCond.Message)
+		}
+		meta.SetStatusCondition(&cgm.Status.Conditions, metav1.Condition{
+			Type:               notificationmiloapiscomv1alpha1.ContactGroupMembershipReadyCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             "ProvidersNotReady",
+			Message:            notReadyMsg,
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: cgm.GetGeneration(),
+		})
+	}
 }
