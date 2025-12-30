@@ -48,6 +48,7 @@ rules:
   - notification.miloapis.com
   resources:
   - contactgroupmemberships/status
+  - contacts/status
   verbs:
   - get
   - patch
@@ -65,7 +66,6 @@ rules:
   - notification.miloapis.com
   resources:
   - contactgroups/status
-  - contacts/status
   - emails/status
   verbs:
   - get

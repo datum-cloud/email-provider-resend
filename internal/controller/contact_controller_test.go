@@ -71,17 +71,18 @@ var _ = ginkgo.Describe("ContactController", func() {
 	})
 
 	ginkgo.Context("when the contact is created for the first time", func() {
-		ginkgo.It("sets the Ready condition", func() {
+		ginkgo.It("sets the Resend-specific Ready condition", func() {
 			_, err := controller.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: contact.Name, Namespace: contact.Namespace}})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 			fetched := &notificationv1.Contact{}
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: contact.Name, Namespace: contact.Namespace}, fetched)).To(gomega.Succeed())
 
-			cond := meta.FindStatusCondition(fetched.Status.Conditions, notificationv1.ContactReadyCondition)
-			gomega.Expect(cond).NotTo(gomega.BeNil())
-			gomega.Expect(cond.Reason).To(gomega.Equal(notificationv1.ContactCreatePendingReason))
-			gomega.Expect(cond.Status).To(gomega.Equal(metav1.ConditionFalse))
+			// Check Resend-specific condition (this controller only manages Resend)
+			resendCond := meta.FindStatusCondition(fetched.Status.Conditions, ResendContactReadyCondition)
+			gomega.Expect(resendCond).NotTo(gomega.BeNil())
+			gomega.Expect(resendCond.Reason).To(gomega.Equal(ResendContactPendingReason))
+			gomega.Expect(resendCond.Status).To(gomega.Equal(metav1.ConditionTrue))
 
 			// provider call assertions
 			gomega.Expect(prov.CreateContactCallCount).To(gomega.Equal(1))

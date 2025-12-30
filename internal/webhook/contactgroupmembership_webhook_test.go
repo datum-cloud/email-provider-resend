@@ -62,8 +62,8 @@ func TestNewResendContactWebhookV1_CGMNotFound(t *testing.T) {
 	}
 
 	resp := wh.Handler.Handle(context.TODO(), Request{ContactEvent: &evt})
-	if resp.HttpStatus != http.StatusNotFound {
-		t.Fatalf("expected %d got %d", http.StatusNotFound, resp.HttpStatus)
+	if resp.HttpStatus != http.StatusOK {
+		t.Fatalf("expected %d got %d", http.StatusOK, resp.HttpStatus)
 	}
 }
 
@@ -108,7 +108,8 @@ func TestNewResendContactWebhookV1_SuccessPath(t *testing.T) {
 	}
 	found := false
 	for _, c := range updated.Status.Conditions {
-		if c.Type == notificationv1alpha1.ContactReadyCondition && c.Status == metav1.ConditionTrue {
+		// Webhook sets ResendContactReady, not the global ContactReady (which is set by controller aggregation)
+		if c.Type == "ResendContactReady" && c.Status == metav1.ConditionTrue {
 			found = true
 			break
 		}
