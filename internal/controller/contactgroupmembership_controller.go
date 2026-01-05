@@ -161,6 +161,11 @@ func (r *ContactGroupMembershipController) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, fmt.Errorf("failed to get ContactGroup: %w", err)
 	}
 
+	// Set Status.Username based on Contact.Spec.SubjectRef.Kind
+	if contact.Spec.SubjectRef.Kind == "User" {
+		contactGroupMembership.Status.Username = contact.Spec.SubjectRef.Name
+	}
+
 	oldStatus := contactGroupMembership.Status.DeepCopy()
 	existingCond := meta.FindStatusCondition(contactGroupMembership.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipReadyCondition)
 	updatedCond := meta.FindStatusCondition(contactGroupMembership.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdatedCondition)

@@ -50,7 +50,12 @@ var _ = ginkgo.Describe("ContactGroupMembershipRemovalController", func() {
 		contact = &notificationv1.Contact{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "notification.miloapis.com/v1alpha1", Kind: "Contact"},
 			ObjectMeta: metav1.ObjectMeta{Name: "john-doe", Namespace: "default"},
-			Spec:       notificationv1.ContactSpec{FamilyName: "Doe", GivenName: "John", Email: "john@example.com"},
+			Spec: notificationv1.ContactSpec{
+				FamilyName: "Doe",
+				GivenName:  "John",
+				Email:      "john@example.com",
+				SubjectRef: &notificationv1.SubjectReference{Kind: "User", Name: "john-user"},
+			},
 		}
 
 		contactGroup = &notificationv1.ContactGroup{
@@ -108,16 +113,19 @@ var _ = ginkgo.Describe("ContactGroupMembershipRemovalController", func() {
 			// Removal object should have Ready condition true
 			fetched := &notificationv1.ContactGroupMembershipRemoval{}
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: removal.Name, Namespace: removal.Namespace}, fetched)).To(gomega.Succeed())
+			// Check status.username is set from contact's SubjectRef
+			gomega.Expect(fetched.Status.Username).To(gomega.Equal("john-user"))
 			cond := meta.FindStatusCondition(fetched.Status.Conditions, notificationv1.ContactGroupMembershipRemovalReadyCondition)
 			gomega.Expect(cond).NotTo(gomega.BeNil())
 			gomega.Expect(cond.Status).To(gomega.Equal(metav1.ConditionTrue))
 		})
 
-		ginkgo.It("skips if Ready condition already true", func() {
-			// Pre-set Ready condition on latest version of the object
+		ginkgo.It("skips if Ready condition already true and Username is set", func() {
+			// Pre-set Ready condition and Username on latest version of the object
 			latest := &notificationv1.ContactGroupMembershipRemoval{}
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: removal.Name, Namespace: removal.Namespace}, latest)).To(gomega.Succeed())
 
+			latest.Status.Username = "john-user"
 			meta.SetStatusCondition(&latest.Status.Conditions, metav1.Condition{
 				Type:   notificationv1.ContactGroupMembershipRemovalReadyCondition,
 				Status: metav1.ConditionTrue,
