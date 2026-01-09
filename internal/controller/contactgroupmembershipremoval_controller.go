@@ -64,9 +64,24 @@ func (r *ContactGroupMembershipRemovalController) Reconcile(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to get ContactGroupMembershipRemoval: %w", err)
 	}
 
-	if meta.IsStatusConditionTrue(cgmr.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipRemovalReadyCondition) {
-		log.Info("Skipping ContactGroupMembershipRemoval reconciliation, as it is already reconciled")
-		return ctrl.Result{}, nil
+	// TODO: remove wrapper if block when migration is complete
+	if cgmr.Status.Username != "" {
+		if meta.IsStatusConditionTrue(cgmr.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipRemovalReadyCondition) {
+			log.Info("Skipping ContactGroupMembershipRemoval reconciliation, as it is already reconciled")
+			return ctrl.Result{}, nil
+		}
+	}
+
+	// Get referenced contact
+	contact := &notificationmiloapiscomv1alpha1.Contact{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: cgmr.Spec.ContactRef.Namespace, Name: cgmr.Spec.ContactRef.Name}, contact); err != nil {
+		log.Error(err, "Failed to get Contact")
+		return ctrl.Result{}, fmt.Errorf("failed to get Contact: %w", err)
+	}
+
+	// Set Status.Username based on Contact.Spec.SubjectRef.Kind
+	if contact.Spec.SubjectRef.Kind == "User" {
+		cgmr.Status.Username = contact.Spec.SubjectRef.Name
 	}
 
 	// Get associated ContactGroupMemberships to contact group name and contact ref

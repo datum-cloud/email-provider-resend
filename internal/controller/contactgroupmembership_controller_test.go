@@ -51,7 +51,12 @@ var _ = ginkgo.Describe("ContactGroupMembershipController", func() {
 		contact = &notificationv1.Contact{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "notification.miloapis.com/v1alpha1", Kind: "Contact"},
 			ObjectMeta: metav1.ObjectMeta{Name: "alice", Namespace: "default"},
-			Spec:       notificationv1.ContactSpec{FamilyName: "Doe", GivenName: "Alice", Email: "alice@example.com"},
+			Spec: notificationv1.ContactSpec{
+				FamilyName: "Doe",
+				GivenName:  "Alice",
+				Email:      "alice@example.com",
+				SubjectRef: &notificationv1.SubjectReference{Kind: "User", Name: "alice-user"},
+			},
 		}
 
 		contactGroup = &notificationv1.ContactGroup{
@@ -97,6 +102,8 @@ var _ = ginkgo.Describe("ContactGroupMembershipController", func() {
 			gomega.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: membership.Name, Namespace: membership.Namespace}, fetched)).To(gomega.Succeed())
 
 			gomega.Expect(fetched.Status.ProviderID).To(gomega.Equal("cgm-1"))
+			// Check status.username is set from contact's SubjectRef
+			gomega.Expect(fetched.Status.Username).To(gomega.Equal("alice-user"))
 			// Check Resend-specific condition (this controller only manages Resend)
 			resendCond := meta.FindStatusCondition(fetched.Status.Conditions, ResendContactGroupMembershipReadyCondition)
 			gomega.Expect(resendCond).NotTo(gomega.BeNil())
