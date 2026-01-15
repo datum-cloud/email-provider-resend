@@ -80,7 +80,7 @@ func (r *ContactGroupMembershipRemovalController) Reconcile(ctx context.Context,
 	}
 
 	// Set Status.Username based on Contact.Spec.SubjectRef.Kind
-	if contact.Spec.SubjectRef.Kind == "User" {
+	if contact.Spec.SubjectRef != nil && contact.Spec.SubjectRef.Kind == "User" {
 		cgmr.Status.Username = contact.Spec.SubjectRef.Name
 	}
 

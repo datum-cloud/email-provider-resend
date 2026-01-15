@@ -162,7 +162,7 @@ func (r *ContactGroupMembershipController) Reconcile(ctx context.Context, req ct
 	}
 
 	// Set Status.Username based on Contact.Spec.SubjectRef.Kind
-	if contact.Spec.SubjectRef.Kind == "User" {
+	if contact.Spec.SubjectRef != nil && contact.Spec.SubjectRef.Kind == "User" {
 		contactGroupMembership.Status.Username = contact.Spec.SubjectRef.Name
 	}
 
