@@ -167,11 +167,11 @@ func (r *ContactGroupMembershipController) Reconcile(ctx context.Context, req ct
 	}
 
 	oldStatus := contactGroupMembership.Status.DeepCopy()
-	existingCond := meta.FindStatusCondition(contactGroupMembership.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipReadyCondition)
+	readyCond := meta.FindStatusCondition(contactGroupMembership.Status.Conditions, ResendContactGroupMembershipReadyCondition)
 	updatedCond := meta.FindStatusCondition(contactGroupMembership.Status.Conditions, notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdatedCondition)
 
 	switch {
-	case existingCond == nil:
+	case readyCond == nil:
 		log.Info("ContactGroupMembership first creation")
 		// First creation – condition not present yet
 		// Create ContactGroupMembership on email provider
@@ -189,6 +189,13 @@ func (r *ContactGroupMembershipController) Reconcile(ctx context.Context, req ct
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: contactGroupMembership.GetGeneration(),
 		})
+
+		contactGroupMembership.Status.Providers = []notificationmiloapiscomv1alpha1.ContactProviderStatus{
+			{
+				Name: "Resend",
+				ID:   emailProviderContactGroupMembership.ContactGroupMembershipID,
+			},
+		}
 
 	// Update requested – Updated condition is False with the specific reason
 	case updatedCond != nil && updatedCond.Status == metav1.ConditionFalse && updatedCond.Reason == notificationmiloapiscomv1alpha1.ContactGroupMembershipUpdateRequestedReason:

@@ -10,7 +10,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
-require go.miloapis.com/milo v0.14.3-0.20260105133739-4ac940dbe3e2
+require go.miloapis.com/milo v0.16.2
 
 require github.com/svix/svix-webhooks v1.74.1
 
