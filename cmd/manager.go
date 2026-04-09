@@ -137,6 +137,13 @@ func createManagerCommand() *cobra.Command {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	setupLog.Info("starting email-provider-resend",
+		"version", version,
+		"gitCommit", gitCommit,
+		"gitTreeState", gitTreeState,
+		"buildDate", buildDate,
+	)
+
 	return cmd
 }
 

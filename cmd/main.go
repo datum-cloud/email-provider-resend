@@ -17,6 +17,11 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+
+	version      = "dev"
+	gitCommit    = "unknown"
+	gitTreeState = "unknown"
+	buildDate    = "unknown"
 )
 
 func init() {
