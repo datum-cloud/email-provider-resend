@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: resend-webhook
-          image: ghcr.io/datum-cloud/email-provider-resend:latest
+          image: ghcr.io/milo-os/resend-provider:latest
           imagePullPolicy: IfNotPresent
           args:
             - resend-webhook

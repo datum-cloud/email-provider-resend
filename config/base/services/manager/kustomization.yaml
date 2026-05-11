@@ -4,5 +4,5 @@ resources:
 - manager.yaml
 - metrics-service.yaml
 images:
-- name: ghcr.io/datum-cloud/email-provider-resend
+- name: ghcr.io/milo-os/resend-provider
   newTag: latest

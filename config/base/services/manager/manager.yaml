@@ -110,7 +110,7 @@ spec:
           - secretRef:
               name: resend-keys # MUST contain the key RESEND_API_KEY
 
-        image: ghcr.io/datum-cloud/email-provider-resend:latest
+        image: ghcr.io/milo-os/resend-provider:latest
         name: controller-manager
         
         ports:
