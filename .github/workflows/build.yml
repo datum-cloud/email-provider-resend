@@ -31,6 +31,7 @@ jobs:
       packages: write
     uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1.13.1
     with:
+      registry-organization: milo-os
       image-name: email-provider-resend
       platforms: linux/amd64,linux/arm64
     secrets: inherit
@@ -43,9 +44,9 @@ jobs:
       packages: write
     uses: datum-cloud/actions/.github/workflows/publish-kustomize-bundle.yaml@v1.9.0
     with:
-      bundle-name: ghcr.io/datum-cloud/email-provider-resend-kustomize
+      bundle-name: ghcr.io/milo-os/resend-provider-kustomize
       bundle-path: config
       image-overlays: config/base
-      image-name: ghcr.io/datum-cloud/email-provider-resend
+      image-name: ghcr.io/milo-os/resend-provider
       debug: true
     secrets: inherit
